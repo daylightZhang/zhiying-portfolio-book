@@ -1,0 +1,39 @@
+export interface HoldingSummary {
+  id: number
+  symbol: string
+  name: string
+  market: string
+  quantity: number
+  cost_price: number
+  holding_ratio: number
+  contract_multiplier: number
+  current_price: number | null
+  currency: string
+  market_value: number
+  market_value_base: number
+  cost_total: number
+  gain_loss: number
+  gain_loss_pct: number
+  weight_pct: number
+  price_updated_at: string | null
+}
+
+export interface MarketBreakdown {
+  value: number
+  weight_pct: number
+}
+
+export interface PortfolioSummary {
+  base_currency: string
+  total_market_value: number
+  total_cost: number
+  total_gain_loss: number
+  total_gain_loss_pct: number
+  total_cash: number
+  cash_balances: Record<string, number>
+  holdings: HoldingSummary[]
+  by_market: Record<string, MarketBreakdown>
+  by_currency: Record<string, MarketBreakdown>
+  exchange_rates: Record<string, number>
+  last_refreshed: string | null
+}

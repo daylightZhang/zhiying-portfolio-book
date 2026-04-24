@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* ========== Semantic color tokens exposed to Tailwind ========== */
+@theme {
+  /* Backgrounds */
+  --color-bg-primary: var(--th-bg-primary);
+  --color-bg-card: var(--th-bg-card);
+  --color-bg-hover: var(--th-bg-hover);
+  --color-input-bg: var(--th-input-bg);
+  --color-overlay: var(--th-overlay);
+
+  /* Text */
+  --color-t-primary: var(--th-text-primary);
+  --color-t-secondary: var(--th-text-secondary);
+  --color-t-muted: var(--th-text-muted);
+  --color-t-faint: var(--th-text-faint);
+
+  /* Accent */
+  --color-accent: var(--th-accent);
+  --color-accent-light: var(--th-accent-light);
+  --color-accent-bg: var(--th-accent-bg);
+
+  /* Borders */
+  --color-border: var(--th-border);
+  --color-border-subtle: var(--th-border-subtle);
+
+  /* Finance */
+  --color-gain: var(--th-gain);
+  --color-loss: var(--th-loss);
+}
+
+/* ========== Theme: 极光 Aurora (Light, Premium) ========== */
+[data-theme="aurora"] {
+  --th-bg-primary: #f0f4f8;
+  --th-bg-card: #ffffff;
+  --th-bg-hover: #e8edf3;
+  --th-input-bg: #f0f4f8;
+  --th-overlay: rgba(15, 23, 42, 0.45);
+
+  --th-text-primary: #0f172a;
+  --th-text-secondary: #334155;
+  --th-text-muted: #64748b;
+  --th-text-faint: #94a3b8;
+
+  --th-accent: #2563eb;
+  --th-accent-light: #3b82f6;
+  --th-accent-bg: rgba(37, 99, 235, 0.08);
+
+  --th-border: #cbd5e1;
+  --th-border-subtle: #e2e8f0;
+
+  --th-gain: #dc2626;
+  --th-loss: #16a34a;
+}
+
+/* ========== Theme: 翡翠 Jade (Light, Natural) ========== */
+[data-theme="jade"] {
+  --th-bg-primary: #f5f5f0;
+  --th-bg-card: #ffffff;
+  --th-bg-hover: #ecece5;
+  --th-input-bg: #f5f5f0;
+  --th-overlay: rgba(28, 25, 23, 0.45);
+
+  --th-text-primary: #1c1917;
+  --th-text-secondary: #44403c;
+  --th-text-muted: #78716c;
+  --th-text-faint: #a8a29e;
+
+  --th-accent: #059669;
+  --th-accent-light: #10b981;
+  --th-accent-bg: rgba(5, 150, 105, 0.08);
+
+  --th-border: #d6d3d1;
+  --th-border-subtle: #e7e5e4;
+
+  --th-gain: #dc2626;
+  --th-loss: #059669;
+}
+
+/* ========== Theme: 星轨 Nebula (Dark, Cool) ========== */
+[data-theme="nebula"] {
+  --th-bg-primary: #0c0a1d;
+  --th-bg-card: #151230;
+  --th-bg-hover: #1e1a42;
+  --th-input-bg: #0f0d22;
+  --th-overlay: rgba(0, 0, 0, 0.65);
+
+  --th-text-primary: #f1f0ff;
+  --th-text-secondary: #c4b5fd;
+  --th-text-muted: #8b7ec8;
+  --th-text-faint: #5b4f91;
+
+  --th-accent: #8b5cf6;
+  --th-accent-light: #a78bfa;
+  --th-accent-bg: rgba(139, 92, 246, 0.15);
+
+  --th-border: #2e2660;
+  --th-border-subtle: #221d4b;
+
+  --th-gain: #f87171;
+  --th-loss: #4ade80;
+}
+
+/* ========== Theme: 深海 Abyss (Dark, Classic) ========== */
+[data-theme="abyss"] {
+  --th-bg-primary: #0a1628;
+  --th-bg-card: #111d33;
+  --th-bg-hover: #1a2940;
+  --th-input-bg: #0d1a2e;
+  --th-overlay: rgba(0, 0, 0, 0.65);
+
+  --th-text-primary: #f1f5f9;
+  --th-text-secondary: #cbd5e1;
+  --th-text-muted: #94a3b8;
+  --th-text-faint: #475569;
+
+  --th-accent: #3b82f6;
+  --th-accent-light: #60a5fa;
+  --th-accent-bg: rgba(59, 130, 246, 0.15);
+
+  --th-border: #1e3a5f;
+  --th-border-subtle: #162d4a;
+
+  --th-gain: #ef4444;
+  --th-loss: #22c55e;
+}
+
+/* ========== Animations ========== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+.animate-slideUp { animation: slideUp 0.25s ease-out; }
+.animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+.animate-marquee { animation: marquee 40s linear infinite; }
+
+/* ========== Glass Effect ========== */
+.glass {
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+/* ========== Card Hover ========== */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.05);
+}
+
+/* ========== Base Styles ========== */
+body {
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  background-color: var(--th-bg-primary);
+  color: var(--th-text-secondary);
+  margin: 0;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--th-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--th-border);
+  border-radius: 3px;
+}
