@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -60,7 +61,7 @@ def create_transaction(db: Session, data: TransactionCreate) -> Transaction | No
         holding.quantity = data.quantity
         holding.cost_price = data.price
 
-    holding.updated_at = datetime.now(timezone.utc)
+    holding.updated_at = now_beijing()
     db.commit()
     db.refresh(tx)
     return tx

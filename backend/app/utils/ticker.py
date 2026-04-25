@@ -1,4 +1,12 @@
 import enum
+from datetime import datetime, timezone, timedelta
+
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def now_beijing() -> datetime:
+    """Return current time in Beijing timezone (UTC+8), without tzinfo for SQLite compatibility."""
+    return datetime.now(BEIJING_TZ).replace(tzinfo=None)
 
 
 class Market(str, enum.Enum):

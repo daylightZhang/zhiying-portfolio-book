@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 import yfinance as yf
@@ -8,24 +9,78 @@ from app.utils.ticker import AKSHARE_MARKETS
 
 
 def refresh_all_prices(db: Session) -> dict:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     holdings = list(db.scalars(select(Holding)).all())
     if not holdings:
         return {"updated": 0, "failed": 0, "details": []}
 
+    now = now_beijing()
     results = {"updated": 0, "failed": 0, "details": []}
-    now = datetime.now(timezone.utc)
 
-    # Split by data source
-    akshare_holdings = [h for h in holdings if h.market in {m.value for m in AKSHARE_MARKETS}]
-    yfinance_holdings = [h for h in holdings if h.market not in {m.value for m in AKSHARE_MARKETS}]
+    def _resolve_one(h: Holding) -> dict:
+        """Resolve price for one holding through its best fallback chain."""
+        symbol = h.symbol
 
-    # AKShare: A-shares + CN Futures
-    if akshare_holdings:
-        _refresh_akshare(db, akshare_holdings, results, now)
+        if h.market == "A_SHARE":
+            # AKShare: bid_ask → hist (skip slow batch)
+            import akshare as ak
+            try:
+                return {"symbol": symbol, "price": _akshare_stock_fallback(ak, symbol), "status": "ok", "source": "akshare"}
+            except Exception:
+                pass
 
-    # yfinance: HK, US, FR, SE
-    if yfinance_holdings:
-        _refresh_yfinance(db, yfinance_holdings, results, now)
+        elif h.market == "CN_FUTURES":
+            import akshare as ak
+            try:
+                df = ak.futures_zh_spot(symbol=symbol, market="FF", adjust="0")
+                if df is not None and not df.empty:
+                    return {"symbol": symbol, "price": float(df.iloc[-1]["current_price"]), "status": "ok", "source": "akshare"}
+            except Exception:
+                pass
+
+        else:
+            # International: finance-query (fastest) → yfinance → akshare-us
+            try:
+                price = _finance_query_price(symbol)
+                if price:
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
+            except Exception:
+                pass
+            try:
+                ticker = yf.Ticker(symbol)
+                price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+                if price:
+                    return {"symbol": symbol, "price": float(price), "status": "ok", "source": "yfinance"}
+            except Exception:
+                pass
+            if h.market == "US":
+                try:
+                    price = _akshare_us_stock_price(symbol)
+                    if price:
+                        return {"symbol": symbol, "price": price, "status": "ok", "source": "akshare-us"}
+                except Exception:
+                    pass
+
+        return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
+
+    # All holdings in parallel, one thread each
+    with ThreadPoolExecutor(max_workers=len(holdings)) as executor:
+        future_map = {executor.submit(_resolve_one, h): h for h in holdings}
+        for fut in as_completed(future_map):
+            h = future_map[fut]
+            try:
+                res = fut.result(timeout=10)
+                if res["status"] == "ok":
+                    h.current_price = res["price"]
+                    h.price_updated_at = now
+                    results["updated"] += 1
+                else:
+                    results["failed"] += 1
+                results["details"].append(res)
+            except Exception as e:
+                results["failed"] += 1
+                results["details"].append({"symbol": h.symbol, "status": "failed", "error": str(e)})
 
     db.commit()
     return results
@@ -105,6 +160,37 @@ def _akshare_stock_fallback(ak, symbol: str) -> float:
     raise ValueError(f"no price data for {symbol}")
 
 
+def _akshare_us_stock_price(symbol: str) -> float | None:
+    """Get US stock price via akshare (东方财富源, works well in mainland China)."""
+    import akshare as ak
+    # Try batch spot data first
+    try:
+        df = ak.stock_us_spot_em()
+        # The code column may have prefix like "105.AAPL", try matching the suffix
+        row = df[df["代码"].str.upper().str.endswith(f".{symbol.upper()}")]
+        if not row.empty:
+            return float(row.iloc[0]["最新价"])
+    except Exception:
+        pass
+    # Try individual history as fallback
+    try:
+        from datetime import date
+        end = date.today().strftime("%Y%m%d")
+        start = (date.today() - timedelta(days=7)).strftime("%Y%m%d")
+        # akshare US symbol format: "105.AAPL" for NASDAQ, "106.BABA" for NYSE
+        for prefix in ["105", "106", "107"]:
+            try:
+                df = ak.stock_us_hist(symbol=f"{prefix}.{symbol.upper()}", period="daily",
+                                      start_date=start, end_date=end, adjust="")
+                if not df.empty:
+                    return float(df.iloc[-1]["收盘"])
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
 def _refresh_yfinance(db: Session, holdings: list[Holding], results: dict, now: datetime):
     symbols = list(set(h.symbol for h in holdings))
     symbol_to_holdings: dict[str, list[Holding]] = {}
@@ -152,7 +238,7 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
     except Exception:
         pass
 
-    # Fallback to finance-query.com
+    # Fallback 2: finance-query.com
     try:
         price = _finance_query_price(symbol)
         if price:
@@ -165,6 +251,21 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
     except Exception:
         pass
 
+    # Fallback 3: akshare US stocks (works well in mainland China)
+    market = symbol_to_holdings.get(symbol, [None])[0]
+    if market and getattr(market, 'market', '') == 'US':
+        try:
+            price = _akshare_us_stock_price(symbol)
+            if price:
+                for h in symbol_to_holdings.get(symbol, []):
+                    h.current_price = price
+                    h.price_updated_at = now
+                results["updated"] += len(symbol_to_holdings.get(symbol, []))
+                results["details"].append({"symbol": symbol, "price": price, "status": "ok", "source": "akshare-us"})
+                return
+        except Exception:
+            pass
+
     results["failed"] += 1
     results["details"].append({"symbol": symbol, "status": "failed", "error": "all sources failed"})
 
@@ -175,7 +276,7 @@ def refresh_single_price(db: Session, symbol: str) -> dict:
         return {"status": "not_found"}
 
     h = holdings[0]
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
 
     if h.market in {m.value for m in AKSHARE_MARKETS}:
         return _refresh_single_akshare(db, holdings, now)
@@ -209,6 +310,7 @@ def _refresh_single_akshare(db: Session, holdings: list[Holding], now: datetime)
 
 
 def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, now: datetime) -> dict:
+    # Try yfinance
     try:
         ticker = yf.Ticker(symbol)
         price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
@@ -218,10 +320,36 @@ def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, 
                 h.current_price = price
                 h.price_updated_at = now
             db.commit()
-            return {"symbol": symbol, "price": price, "status": "ok"}
-        return {"symbol": symbol, "status": "failed", "error": "no price data"}
-    except Exception as e:
-        return {"symbol": symbol, "status": "failed", "error": str(e)}
+            return {"symbol": symbol, "price": price, "status": "ok", "source": "yfinance"}
+    except Exception:
+        pass
+
+    # Try finance-query
+    try:
+        price = _finance_query_price(symbol)
+        if price:
+            for h in holdings:
+                h.current_price = price
+                h.price_updated_at = now
+            db.commit()
+            return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
+    except Exception:
+        pass
+
+    # Try akshare for US stocks
+    if holdings[0].market == "US":
+        try:
+            price = _akshare_us_stock_price(symbol)
+            if price:
+                for h in holdings:
+                    h.current_price = price
+                    h.price_updated_at = now
+                db.commit()
+                return {"symbol": symbol, "price": price, "status": "ok", "source": "akshare-us"}
+        except Exception:
+            pass
+
+    return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
 
 MARKET_INDICES = [
@@ -240,7 +368,7 @@ _INDICES_CACHE_TTL = timedelta(minutes=10)
 
 def get_market_indices() -> list[dict]:
     global _indices_cache, _indices_cache_time
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
 
     if _indices_cache and _indices_cache_time and (now - _indices_cache_time) < _INDICES_CACHE_TTL:
         return _indices_cache
@@ -266,7 +394,7 @@ def get_market_indices() -> list[dict]:
 def _finance_query_price(symbol: str) -> float | None:
     """Get a single stock/index price from finance-query.com."""
     import httpx
-    resp = httpx.get(f"https://finance-query.com/v2/quote/{symbol}", timeout=8)
+    resp = httpx.get(f"https://finance-query.com/v2/quote/{symbol}", timeout=5)
     if resp.status_code == 200:
         d = resp.json()
         price = d.get("regularMarketPrice")
@@ -281,7 +409,7 @@ def _fetch_indices_finance_query() -> list[dict]:
     results = []
     for idx in MARKET_INDICES:
         try:
-            resp = httpx.get(f"https://finance-query.com/v2/quote/{idx['symbol']}", timeout=8)
+            resp = httpx.get(f"https://finance-query.com/v2/quote/{idx['symbol']}", timeout=5)
             if resp.status_code == 200:
                 d = resp.json()
                 price = d.get("regularMarketPrice")

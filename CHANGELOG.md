@@ -1,5 +1,36 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-04-26 v1.5.0 - 时间修复 + 行情并发优化 + 刷新反馈
+
+### 修复
+- **北京时间修复**: 后端所有时间戳从 UTC 改为北京时间 (UTC+8)
+  - 新增 `now_beijing()` 工具函数，替换全部 6 个 service 文件中的 `datetime.now(timezone.utc)`
+  - 数据库直接存储北京时间，前端不再做时区转换
+  - 前端 `format.ts` 简化为直接解析，不再指定 timeZone 参数
+
+### 优化
+- **行情刷新并发**: 从串行改为每个持仓一个线程并行获取 (~20s vs 原 54s)
+  - 国际股票首选 finance-query.com (跳过慢的 yfinance batch)
+  - finance-query timeout 从 8s 收紧到 5s，超时走 yfinance 兜底
+  - 去掉易超时的 `stock_zh_a_spot_em` batch，A 股直接走 `bid_ask_em → hist` 回退
+
+### 新增
+- **刷新成功 Toast**: 右上角毛玻璃提示 "行情刷新成功: X 个更新"，3 秒自动消失
+- **刷新中状态**: 按钮文字变为 "刷新中..."
+- **上次刷新具体时间**: 同时显示相对时间和具体时间，如 "更新于 5分钟前 (2026/04/26 01:01)"
+
+---
+
+## 2026-04-26 v1.4.2 - AKShare 美股数据源
+
+### 新增
+- **AKShare 美股回退**: 美股行情新增第三回退源 `akshare stock_us_spot_em / stock_us_hist`
+  - 完整回退链: yfinance → finance-query.com → akshare (东方财富源，国内网络友好)
+  - batch 和 single refresh 均支持三级回退
+- `_akshare_us_stock_price()` 函数: 先尝试 `stock_us_spot_em` 批量匹配，再逐个尝试 NASDAQ(105)/NYSE(106) 前缀的历史数据
+
+---
+
 ## 2026-04-24 v1.4.1 - 新增 finance-query.com 备用数据源
 
 ### 新增

@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -22,7 +23,7 @@ def get_holding(db: Session, holding_id: int) -> Holding | None:
 
 def create_holding(db: Session, data: HoldingCreate) -> Holding:
     currency = data.currency or MARKET_CURRENCY_MAP.get(data.market, Currency.USD)
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
     transacted_at = data.transacted_at or now
 
     # A股和中国期货代码不做大写转换
@@ -83,7 +84,7 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
             quantity=new_qty,
             price=new_cost,
             total_amount=new_qty * new_cost,
-            transacted_at=datetime.now(timezone.utc),
+            transacted_at=now_beijing(),
             notes=f"Adjusted from qty={holding.quantity}, cost={holding.cost_price}",
         )
         db.add(tx)
@@ -91,7 +92,7 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
         holding.quantity = new_qty
         holding.cost_price = new_cost
 
-    holding.updated_at = datetime.now(timezone.utc)
+    holding.updated_at = now_beijing()
     db.commit()
     db.refresh(holding)
     return holding

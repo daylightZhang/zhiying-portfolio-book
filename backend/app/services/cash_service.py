@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -17,7 +18,7 @@ def get_balance(db: Session, currency: str) -> float:
 
 def _update_balance(db: Session, currency: str, delta: float):
     """Add delta to cash balance for given currency. Creates row if missing."""
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
     row = db.scalar(select(CashBalance).where(CashBalance.currency == currency))
     if row:
         row.balance += delta
@@ -27,7 +28,7 @@ def _update_balance(db: Session, currency: str, delta: float):
 
 
 def deposit(db: Session, currency: str, amount: float, notes: str | None = None) -> CashBalance:
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
     _update_balance(db, currency, amount)
 
     tx = Transaction(
@@ -47,7 +48,7 @@ def deposit(db: Session, currency: str, amount: float, notes: str | None = None)
 
 
 def withdraw(db: Session, currency: str, amount: float, notes: str | None = None) -> CashBalance:
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
     _update_balance(db, currency, -amount)
 
     tx = Transaction(

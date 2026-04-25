@@ -1,4 +1,5 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 import yfinance as yf
@@ -26,7 +27,7 @@ def get_rate(db: Session, from_currency: str, to_currency: str) -> float:
         return 1.0
 
     key = _cache_key(from_currency, to_currency)
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
 
     if key in _rate_cache:
         rate, cached_at = _rate_cache[key]
@@ -76,7 +77,7 @@ def _fetch_usd_rate(currency: str) -> float | None:
 
 
 def _store_rate(db: Session, from_c: str, to_c: str, rate: float):
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
     existing = db.scalar(
         select(ExchangeRate).where(
             ExchangeRate.from_currency == from_c,
