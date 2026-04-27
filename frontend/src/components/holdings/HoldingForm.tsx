@@ -6,10 +6,9 @@ import type { Holding, HoldingCreate, HoldingUpdate } from '../../types/holding'
 
 const MARKET_OPTIONS = MARKETS.map(m => ({ value: m.value, label: m.label, hint: m.hint }))
 
-function guessMultiplier(symbol: string): number {
+function guessProduct(symbol: string) {
   const upper = symbol.toUpperCase().replace(/[0-9]/g, '')
-  const match = CN_FUTURES_PRODUCTS.find(p => p.code === upper)
-  return match?.multiplier ?? 1
+  return CN_FUTURES_PRODUCTS.find(p => p.code === upper)
 }
 
 interface Props {
@@ -28,6 +27,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
   const [costPrice, setCostPrice] = useState('')
   const [holdingRatio, setHoldingRatio] = useState('100')
   const [contractMultiplier, setContractMultiplier] = useState('1')
+  const [marginRate, setMarginRate] = useState('0')
   const [notes, setNotes] = useState('')
 
   const selectedMarket = MARKETS.find(m => m.value === market)
@@ -42,6 +42,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
       setCostPrice(String(editing.cost_price))
       setHoldingRatio(String((editing.holding_ratio ?? 1) * 100))
       setContractMultiplier(String(editing.contract_multiplier ?? 1))
+      setMarginRate(String((editing.margin_rate ?? 0) * 100))
       setNotes(editing.notes || '')
     } else {
       setMarket('A_SHARE')
@@ -51,15 +52,19 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
       setCostPrice('')
       setHoldingRatio('100')
       setContractMultiplier('1')
+      setMarginRate('0')
       setNotes('')
     }
   }, [editing, open])
 
-  // Auto-fill multiplier when futures symbol changes
+  // Auto-fill multiplier and margin rate when futures symbol changes
   useEffect(() => {
     if (isFutures && symbol && !editing) {
-      const m = guessMultiplier(symbol)
-      if (m > 1) setContractMultiplier(String(m))
+      const product = guessProduct(symbol)
+      if (product) {
+        if (product.multiplier > 1) setContractMultiplier(String(product.multiplier))
+        setMarginRate(String(product.marginRate))
+      }
     }
   }, [symbol, isFutures, editing])
 
@@ -69,6 +74,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
     e.preventDefault()
     const ratio = Math.min(1, Math.max(0, parseFloat(holdingRatio) / 100))
     const multiplier = isFutures ? parseFloat(contractMultiplier) || 1 : 1
+    const mRate = isFutures ? Math.max(0, parseFloat(marginRate) / 100) : 0
 
     if (editing && onSubmitUpdate) {
       onSubmitUpdate({
@@ -77,6 +83,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
         cost_price: parseFloat(costPrice),
         holding_ratio: ratio,
         contract_multiplier: multiplier,
+        margin_rate: mRate,
         notes: notes.trim() || undefined,
       })
     } else if (onSubmitCreate) {
@@ -88,6 +95,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
         cost_price: parseFloat(costPrice),
         holding_ratio: ratio,
         contract_multiplier: multiplier,
+        margin_rate: mRate,
         currency: selectedMarket?.currency,
         notes: notes.trim() || undefined,
       })
@@ -127,12 +135,12 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
               />
               {isFutures && (
                 <div className="mt-2 rounded-lg bg-bg-hover p-2.5 text-xs text-t-faint animate-fadeIn">
-                  <p className="font-medium text-t-muted mb-1">中金所品种 (合约乘数):</p>
+                  <p className="font-medium text-t-muted mb-1">中金所品种 (乘数 / 保证金):</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                     {CN_FUTURES_PRODUCTS.map(p => (
                       <span key={p.code}>
                         <span className="text-accent font-medium">{p.code}</span> {p.name}
-                        <span className="text-t-faint"> ×{p.multiplier}</span>
+                        <span className="text-t-faint"> ×{p.multiplier} {p.marginRate}%</span>
                       </span>
                     ))}
                   </div>
@@ -195,7 +203,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
           </div>
 
           {isFutures && (
-            <div className="grid grid-cols-2 gap-3 animate-fadeIn">
+            <div className="grid grid-cols-3 gap-3 animate-fadeIn">
               <div>
                 <label className="block text-xs text-t-muted mb-1">合约乘数</label>
                 <input
@@ -206,6 +214,20 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
                   onChange={e => setContractMultiplier(e.target.value)}
                   required
                   className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-t-muted mb-1">保证金比例 %</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  max="100"
+                  value={marginRate}
+                  onChange={e => setMarginRate(e.target.value)}
+                  required
+                  className={inputClass}
+                  placeholder="12"
                 />
               </div>
               <div>

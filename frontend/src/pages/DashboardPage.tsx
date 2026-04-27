@@ -125,6 +125,7 @@ export default function DashboardPage() {
           totalCash={summary.total_cash}
           gainLoss={summary.total_gain_loss}
           gainLossPct={summary.total_gain_loss_pct}
+          realizedPnl={summary.total_realized_pnl}
           currency={baseCurrency}
         />
       )}

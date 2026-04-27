@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.database import get_db
+from app.models.holding import Holding
+from app.models.transaction import Transaction
 from app.schemas.portfolio import PortfolioSummary, HoldingSummary, MarketBreakdown, ExchangeRateResponse
 from app.services import holding_service, currency_service, cash_service
 from app.utils.ticker import MARKET_LABELS
@@ -29,8 +32,15 @@ def get_summary(
         ratio = getattr(h, 'holding_ratio', 1.0) or 1.0
         multiplier = getattr(h, 'contract_multiplier', 1.0) or 1.0
 
-        market_value_native = h.quantity * price * multiplier * ratio
-        cost_total_native = h.quantity * h.cost_price * multiplier * ratio
+        if h.market == "CN_FUTURES":
+            margin_rate = getattr(h, 'margin_rate', 0.0) or 0.0
+            margin_occupied = h.quantity * h.cost_price * multiplier * margin_rate
+            unrealized_pnl = (price - h.cost_price) * multiplier * h.quantity
+            market_value_native = margin_occupied + unrealized_pnl
+            cost_total_native = margin_occupied
+        else:
+            market_value_native = h.quantity * price * multiplier * ratio
+            cost_total_native = h.quantity * h.cost_price * multiplier * ratio
 
         fx_rate = currency_service.get_rate(db, h.currency, base_currency)
         rate_key = f"{h.currency}_{base_currency}"
@@ -63,6 +73,7 @@ def get_summary(
             cost_price=h.cost_price,
             holding_ratio=ratio,
             contract_multiplier=multiplier,
+            margin_rate=getattr(h, 'margin_rate', 0.0) or 0.0,
             current_price=h.current_price,
             currency=h.currency,
             market_value=market_value_native,
@@ -73,6 +84,53 @@ def get_summary(
             weight_pct=0,
             price_updated_at=h.price_updated_at,
         ))
+
+    # Realized P&L: replay all transactions to compute accurately
+    total_realized_pnl = 0.0
+    all_holdings_ids = [h.id for h in holdings]
+    # Also include deleted holdings' transactions (holding_id still in DB if cascade didn't clean)
+    all_txs = list(db.scalars(
+        select(Transaction)
+        .where(Transaction.holding_id.isnot(None))
+        .order_by(Transaction.transacted_at.asc())
+    ).all())
+
+    # Group transactions by holding_id
+    txs_by_holding: dict[int, list] = {}
+    for tx in all_txs:
+        txs_by_holding.setdefault(tx.holding_id, []).append(tx)
+
+    # For each holding (current + any with sell history), replay to get realized P&L
+    holding_map = {h.id: h for h in holdings}
+    for hid, txs in txs_by_holding.items():
+        h = holding_map.get(hid)
+        multiplier = (getattr(h, 'contract_multiplier', 1.0) or 1.0) if h else 1.0
+        ratio = (getattr(h, 'holding_ratio', 1.0) or 1.0) if h else 1.0
+        is_futures = h.market == "CN_FUTURES" if h else False
+        currency = h.currency if h else (txs[0].currency or "CNY")
+
+        # Replay: track running avg cost
+        running_qty = 0.0
+        running_cost = 0.0  # avg cost per unit
+        realized_native = 0.0
+
+        for tx in txs:
+            if tx.type == "BUY":
+                if running_qty + tx.quantity > 0:
+                    running_cost = (running_qty * running_cost + tx.quantity * tx.price) / (running_qty + tx.quantity)
+                running_qty += tx.quantity
+            elif tx.type == "SELL":
+                if is_futures:
+                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier
+                else:
+                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
+                running_qty = max(0, running_qty - tx.quantity)
+            elif tx.type == "ADJUST":
+                running_qty = tx.quantity
+                running_cost = tx.price
+
+        fx_rate = currency_service.get_rate(db, currency, base_currency)
+        total_realized_pnl += realized_native * fx_rate
 
     # Cash balances
     cash_rows = cash_service.get_all_balances(db)
@@ -107,6 +165,7 @@ def get_summary(
         total_cost=total_cost,
         total_gain_loss=total_gain_loss,
         total_gain_loss_pct=total_gain_loss_pct,
+        total_realized_pnl=total_realized_pnl,
         total_cash=total_cash,
         cash_balances=cash_balances_map,
         holdings=holding_summaries,

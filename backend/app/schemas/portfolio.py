@@ -13,6 +13,7 @@ class HoldingSummary(BaseModel):
     cost_price: float
     holding_ratio: float
     contract_multiplier: float
+    margin_rate: float
     current_price: float | None
     currency: str
     market_value: float
@@ -35,6 +36,7 @@ class PortfolioSummary(BaseModel):
     total_cost: float
     total_gain_loss: float
     total_gain_loss_pct: float
+    total_realized_pnl: float
     total_cash: float
     cash_balances: dict[str, float]
     holdings: list[HoldingSummary]

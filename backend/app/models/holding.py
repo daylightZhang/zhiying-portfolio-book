@@ -20,6 +20,7 @@ class Holding(Base):
     price_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     holding_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
     contract_multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
+    margin_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0.0")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())

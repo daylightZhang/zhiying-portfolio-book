@@ -40,6 +40,7 @@ def create_holding(db: Session, data: HoldingCreate) -> Holding:
         cost_price=data.cost_price,
         holding_ratio=data.holding_ratio,
         contract_multiplier=data.contract_multiplier,
+        margin_rate=data.margin_rate,
         currency=currency.value,
         notes=data.notes,
     )
@@ -73,6 +74,8 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
         holding.holding_ratio = data.holding_ratio
     if data.contract_multiplier is not None:
         holding.contract_multiplier = data.contract_multiplier
+    if data.margin_rate is not None:
+        holding.margin_rate = data.margin_rate
 
     if data.quantity is not None or data.cost_price is not None:
         new_qty = data.quantity if data.quantity is not None else holding.quantity

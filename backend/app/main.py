@@ -20,6 +20,8 @@ def _migrate_db():
                 conn.execute(text("ALTER TABLE holdings ADD COLUMN holding_ratio REAL NOT NULL DEFAULT 1.0"))
             if "contract_multiplier" not in columns:
                 conn.execute(text("ALTER TABLE holdings ADD COLUMN contract_multiplier REAL NOT NULL DEFAULT 1.0"))
+            if "margin_rate" not in columns:
+                conn.execute(text("ALTER TABLE holdings ADD COLUMN margin_rate REAL NOT NULL DEFAULT 0.0"))
             conn.execute(text("UPDATE holdings SET market = 'A_SHARE' WHERE market IN ('A_SHARE_SH', 'A_SHARE_SZ')"))
             conn.execute(text("UPDATE holdings SET market = 'CN_FUTURES' WHERE market = 'FUTURES'"))
 

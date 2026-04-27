@@ -12,6 +12,7 @@ class HoldingCreate(BaseModel):
     cost_price: float
     holding_ratio: float = 1.0
     contract_multiplier: float = 1.0
+    margin_rate: float = 0.0
     currency: Currency | None = None
     notes: str | None = None
     transacted_at: datetime | None = None
@@ -23,6 +24,7 @@ class HoldingUpdate(BaseModel):
     cost_price: float | None = None
     holding_ratio: float | None = None
     contract_multiplier: float | None = None
+    margin_rate: float | None = None
     notes: str | None = None
 
 
@@ -35,6 +37,7 @@ class HoldingResponse(BaseModel):
     cost_price: float
     holding_ratio: float
     contract_multiplier: float
+    margin_rate: float
     currency: str
     current_price: float | None
     price_updated_at: datetime | None

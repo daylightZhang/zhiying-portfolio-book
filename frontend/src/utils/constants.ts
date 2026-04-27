@@ -8,13 +8,13 @@ export const MARKETS = [
 ] as const
 
 export const CN_FUTURES_PRODUCTS = [
-  { code: 'IF', name: '沪深300股指', multiplier: 300 },
-  { code: 'IC', name: '中证500股指', multiplier: 200 },
-  { code: 'IH', name: '上证50股指', multiplier: 300 },
-  { code: 'IM', name: '中证1000股指', multiplier: 200 },
-  { code: 'T', name: '10年期国债', multiplier: 10000 },
-  { code: 'TF', name: '5年期国债', multiplier: 10000 },
-  { code: 'TS', name: '2年期国债', multiplier: 20000 },
+  { code: 'IF', name: '沪深300股指', multiplier: 300, marginRate: 12 },
+  { code: 'IC', name: '中证500股指', multiplier: 200, marginRate: 14 },
+  { code: 'IH', name: '上证50股指', multiplier: 300, marginRate: 12 },
+  { code: 'IM', name: '中证1000股指', multiplier: 200, marginRate: 15 },
+  { code: 'T', name: '10年期国债', multiplier: 10000, marginRate: 2 },
+  { code: 'TF', name: '5年期国债', multiplier: 10000, marginRate: 2 },
+  { code: 'TS', name: '2年期国债', multiplier: 20000, marginRate: 2 },
 ]
 
 export const CURRENCIES = ['CNY', 'USD', 'HKD', 'EUR', 'SEK'] as const

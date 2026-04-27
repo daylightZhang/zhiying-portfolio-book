@@ -7,6 +7,7 @@ export interface HoldingSummary {
   cost_price: number
   holding_ratio: number
   contract_multiplier: number
+  margin_rate: number
   current_price: number | null
   currency: string
   market_value: number
@@ -29,6 +30,7 @@ export interface PortfolioSummary {
   total_cost: number
   total_gain_loss: number
   total_gain_loss_pct: number
+  total_realized_pnl: number
   total_cash: number
   cash_balances: Record<string, number>
   holdings: HoldingSummary[]

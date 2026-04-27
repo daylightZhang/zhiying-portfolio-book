@@ -7,6 +7,7 @@ export interface Holding {
   cost_price: number
   holding_ratio: number
   contract_multiplier: number
+  margin_rate: number
   currency: string
   current_price: number | null
   price_updated_at: string | null
@@ -23,6 +24,7 @@ export interface HoldingCreate {
   cost_price: number
   holding_ratio?: number
   contract_multiplier?: number
+  margin_rate?: number
   currency?: string
   notes?: string
   transacted_at?: string
@@ -34,5 +36,6 @@ export interface HoldingUpdate {
   cost_price?: number
   holding_ratio?: number
   contract_multiplier?: number
+  margin_rate?: number
   notes?: string
 }

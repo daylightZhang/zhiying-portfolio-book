@@ -23,10 +23,18 @@ def refresh_all_prices(db: Session) -> dict:
         symbol = h.symbol
 
         if h.market == "A_SHARE":
-            # AKShare: bid_ask → hist (skip slow batch)
+            # AKShare first, then finance-query as fallback
             import akshare as ak
             try:
                 return {"symbol": symbol, "price": _akshare_stock_fallback(ak, symbol), "status": "ok", "source": "akshare"}
+            except Exception:
+                pass
+            # Fallback: finance-query with .SS/.SZ suffix
+            try:
+                yf_symbol = _a_share_to_yahoo(symbol)
+                price = _finance_query_price(yf_symbol)
+                if price:
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
             except Exception:
                 pass
 
@@ -138,9 +146,27 @@ def _refresh_akshare(db: Session, holdings: list[Holding], results: dict, now: d
             results["details"].append({"symbol": h.symbol, "status": "failed", "error": str(e)})
 
 
+def _a_share_to_yahoo(symbol: str) -> str:
+    """Convert A-share code to Yahoo Finance format: SH→.SS, SZ→.SZ."""
+    # Shanghai: 6xxxxx, 5xxxxx (ETF), 688xxx (科创板)
+    # Shenzhen: 0xxxxx, 3xxxxx, 159xxx (ETF), 12xxxx
+    if symbol.startswith(("6", "5", "688")):
+        return f"{symbol}.SS"
+    return f"{symbol}.SZ"
+
+
+def _is_etf_symbol(symbol: str) -> bool:
+    """Detect A-share ETF codes: SH 51xxxx/56xxxx/58xxxx/50xxxx, SZ 159xxx."""
+    return symbol.startswith(("51", "56", "58", "50", "159"))
+
+
 def _akshare_stock_fallback(ak, symbol: str) -> float:
-    """Fallback chain: bid_ask_em → stock_zh_a_hist for individual A-share price."""
-    # Try bid/ask first (real-time during trading hours)
+    """Fallback chain for A-share stocks/ETFs."""
+    # ETFs use dedicated fund_etf_hist_em
+    if _is_etf_symbol(symbol):
+        return _akshare_etf_price(ak, symbol)
+
+    # Stocks: bid_ask_em → stock_zh_a_hist
     try:
         bid_df = ak.stock_bid_ask_em(symbol=symbol)
         latest_row = bid_df[bid_df["item"] == "最新"]
@@ -158,6 +184,17 @@ def _akshare_stock_fallback(ak, symbol: str) -> float:
         return float(df.iloc[-1]["收盘"])
 
     raise ValueError(f"no price data for {symbol}")
+
+
+def _akshare_etf_price(ak, symbol: str) -> float:
+    """Get A-share ETF price via fund_etf_hist_em."""
+    from datetime import date, timedelta
+    end = date.today().strftime("%Y%m%d")
+    start = (date.today() - timedelta(days=7)).strftime("%Y%m%d")
+    df = ak.fund_etf_hist_em(symbol=symbol, period="daily", start_date=start, end_date=end, adjust="")
+    if not df.empty:
+        return float(df.iloc[-1]["收盘"])
+    raise ValueError(f"no ETF price data for {symbol}")
 
 
 def _akshare_us_stock_price(symbol: str) -> float | None:
@@ -304,9 +341,22 @@ def _refresh_single_akshare(db: Session, holdings: list[Holding], now: datetime)
                     hh.price_updated_at = now
                 db.commit()
                 return {"symbol": h.symbol, "price": price, "status": "ok"}
-        return {"symbol": h.symbol, "status": "failed", "error": "no data"}
-    except Exception as e:
-        return {"symbol": h.symbol, "status": "failed", "error": str(e)}
+    except Exception:
+        pass
+    # Fallback: finance-query for A-shares
+    if h.market == "A_SHARE":
+        try:
+            yf_symbol = _a_share_to_yahoo(h.symbol)
+            price = _finance_query_price(yf_symbol)
+            if price:
+                for hh in holdings:
+                    hh.current_price = price
+                    hh.price_updated_at = now
+                db.commit()
+                return {"symbol": h.symbol, "price": price, "status": "ok", "source": "finance-query"}
+        except Exception:
+            pass
+    return {"symbol": h.symbol, "status": "failed", "error": "all sources failed"}
 
 
 def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, now: datetime) -> dict:
