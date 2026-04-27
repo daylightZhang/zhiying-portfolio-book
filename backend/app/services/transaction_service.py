@@ -9,6 +9,27 @@ from app.schemas.transaction import TransactionCreate
 from app.services import cash_service
 
 
+def _build_tx_filter(
+    account_id: int,
+    holding_id: int | None = None,
+    tx_type: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    """Build common WHERE clauses for transaction queries."""
+    from sqlalchemy import and_
+    conditions = [Transaction.account_id == account_id]
+    if holding_id:
+        conditions.append(Transaction.holding_id == holding_id)
+    if tx_type:
+        conditions.append(Transaction.type == tx_type)
+    if start_date:
+        conditions.append(Transaction.transacted_at >= start_date)
+    if end_date:
+        conditions.append(Transaction.transacted_at <= end_date + " 23:59:59")
+    return and_(*conditions)
+
+
 def get_transactions(
     db: Session,
     holding_id: int | None = None,
@@ -16,13 +37,11 @@ def get_transactions(
     limit: int = 50,
     offset: int = 0,
     account_id: int = 1,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> list[Transaction]:
-    stmt = select(Transaction).where(Transaction.account_id == account_id)
-    if holding_id:
-        stmt = stmt.where(Transaction.holding_id == holding_id)
-    if tx_type:
-        stmt = stmt.where(Transaction.type == tx_type)
-    stmt = stmt.order_by(Transaction.transacted_at.desc()).limit(limit).offset(offset)
+    where = _build_tx_filter(account_id, holding_id, tx_type, start_date, end_date)
+    stmt = select(Transaction).where(where).order_by(Transaction.transacted_at.desc()).limit(limit).offset(offset)
     return list(db.scalars(stmt).all())
 
 
@@ -46,7 +65,7 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
         total_amount=data.quantity * data.price,
         currency=holding.currency,
         notes=data.notes,
-        transacted_at=data.transacted_at,
+        transacted_at=data.transacted_at or now_beijing(),
     )
     db.add(tx)
 
@@ -74,10 +93,9 @@ def count_transactions(
     holding_id: int | None = None,
     tx_type: str | None = None,
     account_id: int = 1,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> int:
-    stmt = select(Transaction).where(Transaction.account_id == account_id)
-    if holding_id:
-        stmt = stmt.where(Transaction.holding_id == holding_id)
-    if tx_type:
-        stmt = stmt.where(Transaction.type == tx_type)
-    return len(list(db.scalars(stmt).all()))
+    from sqlalchemy import func
+    where = _build_tx_filter(account_id, holding_id, tx_type, start_date, end_date)
+    return db.scalar(select(func.count()).select_from(Transaction).where(where)) or 0

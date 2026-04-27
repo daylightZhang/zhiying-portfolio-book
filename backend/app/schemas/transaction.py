@@ -18,7 +18,7 @@ class TransactionCreate(BaseModel):
     price: float
     currency: str | None = None
     notes: str | None = None
-    transacted_at: datetime
+    transacted_at: datetime | None = None
 
 
 class TransactionResponse(BaseModel):

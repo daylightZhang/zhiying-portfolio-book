@@ -29,7 +29,6 @@ export default function TradeDialog({ open, onClose, holding, mode, onSubmit }: 
       quantity: parseFloat(quantity),
       price: parseFloat(price),
       notes: notes.trim() || undefined,
-      transacted_at: new Date().toISOString(),
     })
     setQuantity('')
     setPrice('')

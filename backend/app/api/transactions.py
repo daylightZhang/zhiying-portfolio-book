@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,12 +13,15 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 def list_transactions(
     holding_id: int | None = None,
     type: str | None = None,
-    limit: int = 50,
+    limit: int = 20,
     offset: int = 0,
     account_id: int = Query(default=1),
+    start_date: str | None = None,
+    end_date: str | None = None,
     db: Session = Depends(get_db),
 ):
-    txs = transaction_service.get_transactions(db, holding_id, type, limit, offset, account_id)
+    txs = transaction_service.get_transactions(db, holding_id, type, limit, offset, account_id, start_date, end_date)
+    total = transaction_service.count_transactions(db, holding_id, type, account_id, start_date, end_date)
     result = []
     for tx in txs:
         data = TransactionResponse.model_validate(tx)
@@ -28,7 +32,10 @@ def list_transactions(
             data.holding_name = "现金"
             data.holding_symbol = tx.currency or ""
         result.append(data)
-    return result
+    # Return total in header for pagination
+    response = JSONResponse(content=[r.model_dump(mode="json") for r in result])
+    response.headers["X-Total-Count"] = str(total)
+    return response
 
 
 @router.post("", response_model=TransactionResponse, status_code=201)

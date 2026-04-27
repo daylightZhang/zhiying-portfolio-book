@@ -8,6 +8,8 @@ export function useTransactions(params?: {
   type?: string
   limit?: number
   offset?: number
+  start_date?: string
+  end_date?: string
 }) {
   const { accountId } = useCurrentAccount()
   return useQuery({

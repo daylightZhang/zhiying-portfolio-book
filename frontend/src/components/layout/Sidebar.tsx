@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Briefcase, History, Plus, Trash2, ChevronDown, Settings } from 'lucide-react'
+import ConfirmDialog from '../common/ConfirmDialog'
 import type { ThemeId } from '../../hooks/useTheme'
 import { useAccounts, useCurrentAccount, useCreateAccount, useDeleteAccount } from '../../hooks/useAccount'
 
@@ -24,8 +25,10 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings }: Props)
   const [showDropdown, setShowDropdown] = useState(false)
   const [newName, setNewName] = useState('')
   const [showNewInput, setShowNewInput] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const currentAccount = accounts?.find(a => a.id === accountId)
+  const deletingAccount = accounts?.find(a => a.id === deletingId)
 
   const handleCreate = () => {
     if (!newName.trim()) return
@@ -39,21 +42,28 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings }: Props)
     })
   }
 
-  const handleDelete = (id: number, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: number, e: React.MouseEvent) => {
     e.stopPropagation()
     if (accounts && accounts.length <= 1) return
-    if (!confirm('确认删除此账户？所有持仓和交易记录将被清除。')) return
-    deleteAccount.mutate(id, {
+    setDeletingId(id)
+    setShowDropdown(false)
+  }
+
+  const handleDeleteConfirm = () => {
+    if (deletingId === null) return
+    deleteAccount.mutate(deletingId, {
       onSuccess: () => {
-        if (accountId === id) {
-          const remaining = accounts?.filter(a => a.id !== id)
+        if (accountId === deletingId) {
+          const remaining = accounts?.filter(a => a.id !== deletingId)
           if (remaining?.length) setAccountId(remaining[0].id)
         }
+        setDeletingId(null)
       },
     })
   }
 
   return (
+    <>
     <aside className="fixed left-0 top-0 z-40 flex h-full w-56 flex-col border-r border-border bg-bg-card/80 glass">
       <div className="flex items-center gap-3 px-5 py-5">
         <img src="/logo.png" alt="知盈" className="h-9 w-9 rounded-lg" />
@@ -87,7 +97,7 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings }: Props)
                   <span className="truncate">{a.name}</span>
                   {accounts.length > 1 && (
                     <button
-                      onClick={(e) => handleDelete(a.id, e)}
+                      onClick={(e) => handleDeleteClick(a.id, e)}
                       className="text-t-faint hover:text-loss shrink-0 ml-2"
                     >
                       <Trash2 size={13} />
@@ -154,6 +164,18 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings }: Props)
           <span>设置</span>
         </button>
       </div>
+
     </aside>
+
+    <ConfirmDialog
+      open={deletingId !== null}
+      title="删除账户"
+      message={`确定要删除账户「${deletingAccount?.name}」吗？该账户下所有持仓、交易记录和现金余额将被永久删除，此操作不可恢复。`}
+      onConfirm={handleDeleteConfirm}
+      onCancel={() => setDeletingId(null)}
+      confirmLabel="确认删除"
+      danger
+    />
+    </>
   )
 }
