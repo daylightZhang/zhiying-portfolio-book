@@ -48,18 +48,24 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 pass
 
         else:
+            # DB cache: if updated within 1 minute, skip online fetch
+            if h.current_price is not None and h.price_updated_at is not None:
+                age = (now - h.price_updated_at).total_seconds()
+                if age < 60:
+                    return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
+
             # International: google-finance (realtime) → yfinance (realtime) → finance-query (delayed) → akshare-us
             try:
                 price = _google_finance_price(symbol)
                 if price:
-                    return {"symbol": symbol, "price": price, "status": "ok", "source": "google-finance"}
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "google-finance", "realtime": True}
             except Exception:
                 pass
             try:
                 ticker = yf.Ticker(symbol)
                 price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
                 if price:
-                    return {"symbol": symbol, "price": float(price), "status": "ok", "source": "yfinance"}
+                    return {"symbol": symbol, "price": float(price), "status": "ok", "source": "yfinance", "realtime": True}
             except Exception:
                 pass
             try:
@@ -89,8 +95,11 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
             try:
                 res = fut.result(timeout=10)
                 if res["status"] == "ok":
-                    h.current_price = res["price"]
-                    h.price_updated_at = now
+                    # Only update DB for realtime sources (not cache/delayed)
+                    if res.get("source") != "cache":
+                        if res.get("realtime") or h.market in ("A_SHARE", "CN_FUTURES"):
+                            h.current_price = res["price"]
+                            h.price_updated_at = now
                     results["updated"] += 1
                 else:
                     results["failed"] += 1
