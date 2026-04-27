@@ -10,7 +10,7 @@ from app.utils.ticker import MARKET_CURRENCY_MAP, Market, Currency
 
 
 def get_all_holdings(db: Session, market: str | None = None, account_id: int = 1) -> list[Holding]:
-    stmt = select(Holding).where(Holding.account_id == account_id)
+    stmt = select(Holding).where(Holding.account_id == account_id).where(Holding.quantity > 0)
     if market:
         stmt = stmt.where(Holding.market == market)
     stmt = stmt.order_by(Holding.market, Holding.symbol)
