@@ -142,7 +142,7 @@ export default function HoldingsPage() {
         />
       ) : (
         <>
-        <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
+        <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * PAGE_SIZE}px` }}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-t-faint uppercase tracking-wider">

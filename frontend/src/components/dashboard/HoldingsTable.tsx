@@ -22,7 +22,7 @@ export default function HoldingsTable({ holdings, currency }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
+      <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * PAGE_SIZE}px` }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
