@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Briefcase, History, Plus, Trash2, ChevronDown, Settings } from 'lucide-react'
+import { LayoutDashboard, Briefcase, History, Newspaper, Plus, Trash2, ChevronDown, Settings } from 'lucide-react'
 import ConfirmDialog from '../common/ConfirmDialog'
 import type { ThemeId } from '../../hooks/useTheme'
 import { useAccounts, useCurrentAccount, useCreateAccount, useDeleteAccount } from '../../hooks/useAccount'
@@ -9,6 +9,7 @@ const links = [
   { to: '/', icon: LayoutDashboard, label: '总览' },
   { to: '/holdings', icon: Briefcase, label: '持仓' },
   { to: '/history', icon: History, label: '记录' },
+  { to: '/news', icon: Newspaper, label: '资讯' },
 ]
 
 interface Props {

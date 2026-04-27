@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { RefreshCw, CheckCircle2 } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { usePortfolioSummary, useBaseCurrency, useRefreshPrices, useRefreshExchangeRates } from '../hooks/usePortfolio'
+import { useToast } from '../hooks/useToast'
 import CurrencySelector from '../components/dashboard/CurrencySelector'
 import PortfolioSummaryCard from '../components/dashboard/PortfolioSummaryCard'
 import HoldingsTable from '../components/dashboard/HoldingsTable'
@@ -21,15 +22,8 @@ export default function DashboardPage() {
   const navigate = useNavigate()
 
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
-  const [toast, setToast] = useState<string | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval>>()
-  const toastRef = useRef<ReturnType<typeof setTimeout>>()
-
-  const showToast = (msg: string) => {
-    setToast(msg)
-    if (toastRef.current) clearTimeout(toastRef.current)
-    toastRef.current = setTimeout(() => setToast(null), 3000)
-  }
+  const { showToast } = useToast()
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -39,9 +33,9 @@ export default function DashboardPage() {
       const failed = (priceResult as Record<string, number>)?.failed ?? 0
       showToast(`行情刷新成功: ${updated} 个更新${failed > 0 ? `, ${failed} 个失败` : ''}`)
     } catch {
-      showToast('行情刷新失败，请稍后重试')
+      showToast('行情刷新失败，请稍后重试', 'error')
     }
-  }, [refreshPrices, refreshRates])
+  }, [refreshPrices, refreshRates, showToast])
 
   const isRefreshing = refreshPrices.isPending || refreshRates.isPending
 
@@ -87,14 +81,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Toast notification */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-bg-card/95 border border-border-subtle px-4 py-3 shadow-xl glass animate-slideUp">
-          <CheckCircle2 size={16} className="text-loss shrink-0" />
-          <span className="text-sm text-t-primary">{toast}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-t-primary">总览</h2>

@@ -4,6 +4,7 @@ import { formatCurrency } from '../../utils/format'
 import { CURRENCY_SYMBOLS } from '../../utils/constants'
 import CashDialog from './CashDialog'
 import { useDeposit, useWithdraw } from '../../hooks/useCash'
+import { useToast } from '../../hooks/useToast'
 
 interface Props {
   cashBalances: Record<string, number>
@@ -13,6 +14,7 @@ interface Props {
 
 export default function CashPanel({ cashBalances, totalCash, baseCurrency }: Props) {
   const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw' | null>(null)
+  const { showToast } = useToast()
   const depositMut = useDeposit()
   const withdrawMut = useWithdraw()
 
@@ -65,11 +67,12 @@ export default function CashPanel({ cashBalances, totalCash, baseCurrency }: Pro
         mode={dialogMode || 'deposit'}
         onClose={() => setDialogMode(null)}
         onSubmit={(currency, amount, notes) => {
-          if (dialogMode === 'deposit') {
-            depositMut.mutate({ currency, amount, notes })
-          } else {
-            withdrawMut.mutate({ currency, amount, notes })
-          }
+          const isDeposit = dialogMode === 'deposit'
+          const mut = isDeposit ? depositMut : withdrawMut
+          mut.mutate({ currency, amount, notes }, {
+            onSuccess: () => showToast(isDeposit ? '入金成功' : '出金成功'),
+            onError: () => showToast(isDeposit ? '入金失败' : '出金失败', 'error'),
+          })
         }}
       />
     </div>

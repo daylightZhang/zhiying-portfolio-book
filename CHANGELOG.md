@@ -1,5 +1,27 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-04-27 v1.7.0 - 实时资讯 + 操作反馈 + 搜索
+
+### 新增
+- **实时资讯页**: 侧边栏新增"资讯"，展示金十数据市场快讯信息流
+  - 数据源: `jin10.com/flash_newest.js`，后端代理 + 30 秒缓存
+  - 频道筛选: 全部/快讯/A股/期货/数据
+  - 重要快讯红点标记 + 背景高亮，经济数据特殊展示
+  - 显示上次更新时间，手动刷新按钮
+- **全局 Toast 通知系统**: `useToast` Context 替代各页面本地 toast
+  - 持仓操作 (建仓/修改/删除/买入/卖出) 成功/失败提示
+  - 现金操作 (入金/出金) 成功/失败提示
+  - 支持 success/error 两种样式
+- **持仓搜索**: 持仓管理页新增搜索框，按名称或代码实时筛选
+
+### 新文件
+- `backend/app/api/news.py` — 金十快讯代理 API
+- `frontend/src/pages/NewsPage.tsx` — 资讯页面
+- `frontend/src/api/news.ts`, `frontend/src/hooks/useNews.ts` — 快讯 API + hook
+- `frontend/src/hooks/useToast.ts` — 全局 Toast Context
+
+---
+
 ## 2026-04-27 v1.6.2 - 交易记录分页 + 日期筛选 + 时间修复
 
 ### 新增

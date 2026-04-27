@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Search } from 'lucide-react'
 import { useHoldings, useCreateHolding, useUpdateHolding, useDeleteHolding } from '../hooks/useHoldings'
 import { useCreateTransaction } from '../hooks/useTransactions'
 import HoldingForm from '../components/holdings/HoldingForm'
@@ -10,29 +10,49 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmptyState from '../components/common/EmptyState'
 import { MARKETS, CURRENCY_SYMBOLS } from '../utils/constants'
 import { formatNumber } from '../utils/format'
+import { useToast } from '../hooks/useToast'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
 const FILTERS = [{ value: '', label: '全部' }, ...MARKETS.map(m => ({ value: m.value, label: m.label }))]
 
 export default function HoldingsPage() {
   const [marketFilter, setMarketFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
   const [deleting, setDeleting] = useState<Holding | null>(null)
   const [trading, setTrading] = useState<{ holding: Holding; mode: 'BUY' | 'SELL' } | null>(null)
 
+  const { showToast } = useToast()
   const { data: holdings, isLoading } = useHoldings(marketFilter || undefined)
   const createMutation = useCreateHolding()
   const updateMutation = useUpdateHolding()
   const deleteMutation = useDeleteHolding()
   const tradeMutation = useCreateTransaction()
 
-  const handleCreate = (data: HoldingCreate) => createMutation.mutate(data)
+  const handleCreate = (data: HoldingCreate) => {
+    createMutation.mutate(data, {
+      onSuccess: () => showToast('建仓成功'),
+      onError: () => showToast('建仓失败', 'error'),
+    })
+  }
   const handleUpdate = (data: HoldingUpdate) => {
-    if (editing) { updateMutation.mutate({ id: editing.id, data }); setEditing(null) }
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, data }, {
+        onSuccess: () => showToast('修改成功'),
+        onError: () => showToast('修改失败', 'error'),
+      })
+      setEditing(null)
+    }
   }
   const handleDelete = () => {
-    if (deleting) { deleteMutation.mutate(deleting.id); setDeleting(null) }
+    if (deleting) {
+      deleteMutation.mutate(deleting.id, {
+        onSuccess: () => showToast('删除成功'),
+        onError: () => showToast('删除失败', 'error'),
+      })
+      setDeleting(null)
+    }
   }
 
   return (
@@ -49,30 +69,46 @@ export default function HoldingsPage() {
         </button>
       </div>
 
-      {/* Market Filter Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        {FILTERS.map(f => (
-          <button
-            key={f.value}
-            onClick={() => setMarketFilter(f.value)}
-            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              marketFilter === f.value
-                ? 'bg-accent-bg text-accent'
-                : 'text-t-muted hover:bg-bg-hover hover:text-t-secondary'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      {/* Filters */}
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1 overflow-x-auto">
+          {FILTERS.map(f => (
+            <button
+              key={f.value}
+              onClick={() => setMarketFilter(f.value)}
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                marketFilter === f.value
+                  ? 'bg-accent-bg text-accent'
+                  : 'text-t-muted hover:bg-bg-hover hover:text-t-secondary'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative ml-auto">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t-faint" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="搜索名称或代码"
+            className="rounded-lg border border-border bg-input-bg pl-8 pr-3 py-1.5 text-xs text-t-primary outline-none focus:border-accent transition-colors placeholder:text-t-faint w-44"
+          />
+        </div>
       </div>
 
       {/* Holdings List */}
-      {isLoading ? (
+      {(() => {
+        const kw = search.trim().toLowerCase()
+        const filtered = holdings?.filter(h =>
+          !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
+        )
+        return isLoading ? (
         <LoadingSpinner />
-      ) : !holdings || holdings.length === 0 ? (
+      ) : !filtered || filtered.length === 0 ? (
         <EmptyState
           title="暂无持仓"
-          description={marketFilter ? '该市场暂无持仓' : '点击上方"建仓"按钮开始'}
+          description={search ? '未找到匹配的持仓' : marketFilter ? '该市场暂无持仓' : '点击上方"建仓"按钮开始'}
           action={
             !marketFilter ? (
               <button
@@ -99,7 +135,7 @@ export default function HoldingsPage() {
               </tr>
             </thead>
             <tbody>
-              {holdings.map(h => {
+              {filtered.map(h => {
                 const currSymbol = CURRENCY_SYMBOLS[h.currency] || ''
                 return (
                   <tr key={h.id} className="border-b border-border-subtle hover:bg-bg-hover/50 transition-colors duration-150">
@@ -152,7 +188,8 @@ export default function HoldingsPage() {
             </tbody>
           </table>
         </div>
-      )}
+      )
+      })()}
 
       {/* Modals */}
       <HoldingForm
@@ -168,7 +205,10 @@ export default function HoldingsPage() {
         onClose={() => setTrading(null)}
         holding={trading?.holding || null}
         mode={trading?.mode || 'BUY'}
-        onSubmit={data => tradeMutation.mutate(data)}
+        onSubmit={data => tradeMutation.mutate(data, {
+          onSuccess: () => showToast(trading?.mode === 'BUY' ? '买入成功' : '卖出成功'),
+          onError: () => showToast(trading?.mode === 'BUY' ? '买入失败' : '卖出失败', 'error'),
+        })}
       />
 
       <ConfirmDialog

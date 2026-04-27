@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
-from app.api import holdings, transactions, market_data, portfolio, cash, accounts
+from app.api import holdings, transactions, market_data, portfolio, cash, accounts, news
 
 
 def _migrate_db():
@@ -172,6 +172,7 @@ app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(market_data.router, prefix="/api/v1")
 app.include_router(portfolio.router, prefix="/api/v1")
 app.include_router(cash.router, prefix="/api/v1")
+app.include_router(news.router, prefix="/api/v1")
 
 
 @app.get("/api/health")
