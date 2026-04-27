@@ -29,9 +29,16 @@ export default function DashboardPage() {
     try {
       const [priceResult] = await Promise.all([refreshPrices.mutateAsync(), refreshRates.mutateAsync()])
       setCountdown(REFRESH_INTERVAL)
-      const updated = (priceResult as Record<string, number>)?.updated ?? 0
-      const failed = (priceResult as Record<string, number>)?.failed ?? 0
-      showToast(`行情刷新成功: ${updated} 个更新${failed > 0 ? `, ${failed} 个失败` : ''}`)
+      const res = priceResult as Record<string, unknown>
+      const updated = (res?.updated as number) ?? 0
+      const failed = (res?.failed as number) ?? 0
+      if (failed > 0) {
+        const details = (res?.details as Array<Record<string, string>>) || []
+        const failedSymbols = details.filter(d => d.status === 'failed').map(d => d.symbol).join(', ')
+        showToast(`行情刷新: ${updated} 个成功, ${failed} 个失败 (${failedSymbols})`, 'error')
+      } else {
+        showToast(`行情刷新成功: ${updated} 个更新`)
+      }
     } catch {
       showToast('行情刷新失败，请稍后重试', 'error')
     }
