@@ -129,6 +129,7 @@ export default function HoldingsPage() {
           }
         />
       ) : (
+        <>
         <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -210,6 +211,7 @@ export default function HoldingsPage() {
             </div>
           </div>
         )}
+        </>
       )
       })()}
 
