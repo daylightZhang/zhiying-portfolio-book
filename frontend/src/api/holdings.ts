@@ -1,8 +1,9 @@
 import client from './client'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
-export async function getHoldings(market?: string): Promise<Holding[]> {
-  const params = market ? { market } : {}
+export async function getHoldings(market?: string, accountId: number = 1): Promise<Holding[]> {
+  const params: Record<string, unknown> = { account_id: accountId }
+  if (market) params.market = market
   const { data } = await client.get('/holdings', { params })
   return data
 }
@@ -12,8 +13,8 @@ export async function getHolding(id: number): Promise<Holding> {
   return data
 }
 
-export async function createHolding(payload: HoldingCreate): Promise<Holding> {
-  const { data } = await client.post('/holdings', payload)
+export async function createHolding(payload: HoldingCreate, accountId: number = 1): Promise<Holding> {
+  const { data } = await client.post('/holdings', payload, { params: { account_id: accountId } })
   return data
 }
 

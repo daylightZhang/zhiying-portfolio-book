@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,8 +9,8 @@ router = APIRouter(prefix="/holdings", tags=["holdings"])
 
 
 @router.get("", response_model=list[HoldingResponse])
-def list_holdings(market: str | None = None, db: Session = Depends(get_db)):
-    return holding_service.get_all_holdings(db, market)
+def list_holdings(market: str | None = None, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    return holding_service.get_all_holdings(db, market, account_id)
 
 
 @router.get("/{holding_id}", response_model=HoldingResponse)
@@ -22,8 +22,8 @@ def get_holding(holding_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=HoldingResponse, status_code=201)
-def create_holding(data: HoldingCreate, db: Session = Depends(get_db)):
-    return holding_service.create_holding(db, data)
+def create_holding(data: HoldingCreate, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    return holding_service.create_holding(db, data, account_id)
 
 
 @router.put("/{holding_id}", response_model=HoldingResponse)

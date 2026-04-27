@@ -36,9 +36,9 @@ export default function HoldingsTable({ holdings, currency }: Props) {
                 </td>
                 <td className="px-4 py-3"><MarketBadge market={h.market} /></td>
                 <td className="px-4 py-3 text-right text-t-secondary">{formatNumber(h.quantity, 0)}</td>
-                <td className="px-4 py-3 text-right text-t-secondary">{formatCurrency(h.cost_price, h.currency)}</td>
+                <td className="px-4 py-3 text-right text-t-secondary">{formatCurrency(h.cost_price, h.currency, 3)}</td>
                 <td className="px-4 py-3 text-right text-t-primary font-medium">
-                  {h.current_price !== null ? formatCurrency(h.current_price, h.currency) : '—'}
+                  {h.current_price !== null ? formatCurrency(h.current_price, h.currency, 3) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right text-t-primary">
                   {formatCurrency(h.market_value_base, currency)}

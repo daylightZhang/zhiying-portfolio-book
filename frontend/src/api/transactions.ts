@@ -6,12 +6,13 @@ export async function getTransactions(params?: {
   type?: string
   limit?: number
   offset?: number
+  account_id?: number
 }): Promise<Transaction[]> {
   const { data } = await client.get('/transactions', { params })
   return data
 }
 
-export async function createTransaction(payload: TransactionCreate): Promise<Transaction> {
-  const { data } = await client.post('/transactions', payload)
+export async function createTransaction(payload: TransactionCreate, accountId: number = 1): Promise<Transaction> {
+  const { data } = await client.post('/transactions', payload, { params: { account_id: accountId } })
   return data
 }

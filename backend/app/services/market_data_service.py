@@ -8,10 +8,10 @@ from app.models.holding import Holding
 from app.utils.ticker import AKSHARE_MARKETS
 
 
-def refresh_all_prices(db: Session) -> dict:
+def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    holdings = list(db.scalars(select(Holding)).all())
+    holdings = list(db.scalars(select(Holding).where(Holding.account_id == account_id)).all())
     if not holdings:
         return {"updated": 0, "failed": 0, "details": []}
 
@@ -307,8 +307,8 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
     results["details"].append({"symbol": symbol, "status": "failed", "error": "all sources failed"})
 
 
-def refresh_single_price(db: Session, symbol: str) -> dict:
-    holdings = list(db.scalars(select(Holding).where(Holding.symbol == symbol)).all())
+def refresh_single_price(db: Session, symbol: str, account_id: int = 1) -> dict:
+    holdings = list(db.scalars(select(Holding).where(Holding.symbol == symbol, Holding.account_id == account_id)).all())
     if not holdings:
         return {"status": "not_found"}
 

@@ -9,8 +9,8 @@ from app.schemas.holding import HoldingCreate, HoldingUpdate
 from app.utils.ticker import MARKET_CURRENCY_MAP, Market, Currency
 
 
-def get_all_holdings(db: Session, market: str | None = None) -> list[Holding]:
-    stmt = select(Holding)
+def get_all_holdings(db: Session, market: str | None = None, account_id: int = 1) -> list[Holding]:
+    stmt = select(Holding).where(Holding.account_id == account_id)
     if market:
         stmt = stmt.where(Holding.market == market)
     stmt = stmt.order_by(Holding.market, Holding.symbol)
@@ -21,18 +21,18 @@ def get_holding(db: Session, holding_id: int) -> Holding | None:
     return db.get(Holding, holding_id)
 
 
-def create_holding(db: Session, data: HoldingCreate) -> Holding:
+def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Holding:
     currency = data.currency or MARKET_CURRENCY_MAP.get(data.market, Currency.USD)
     now = now_beijing()
     transacted_at = data.transacted_at or now
 
-    # A股和中国期货代码不做大写转换
     if data.market in (Market.A_SHARE, Market.CN_FUTURES):
         symbol = data.symbol.strip()
     else:
         symbol = data.symbol.strip().upper()
 
     holding = Holding(
+        account_id=account_id,
         symbol=symbol,
         name=data.name.strip(),
         market=data.market.value,
@@ -48,6 +48,7 @@ def create_holding(db: Session, data: HoldingCreate) -> Holding:
     db.flush()
 
     tx = Transaction(
+        account_id=account_id,
         holding_id=holding.id,
         type="BUY",
         quantity=data.quantity,
@@ -82,6 +83,7 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
         new_cost = data.cost_price if data.cost_price is not None else holding.cost_price
 
         tx = Transaction(
+            account_id=holding.account_id,
             holding_id=holding.id,
             type="ADJUST",
             quantity=new_qty,

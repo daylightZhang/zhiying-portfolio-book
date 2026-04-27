@@ -1,18 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as holdingsApi from '../api/holdings'
 import type { HoldingCreate, HoldingUpdate } from '../types/holding'
+import { useCurrentAccount } from './useAccount'
 
 export function useHoldings(market?: string) {
+  const { accountId } = useCurrentAccount()
   return useQuery({
-    queryKey: ['holdings', market],
-    queryFn: () => holdingsApi.getHoldings(market),
+    queryKey: ['holdings', accountId, market],
+    queryFn: () => holdingsApi.getHoldings(market, accountId),
   })
 }
 
 export function useCreateHolding() {
   const qc = useQueryClient()
+  const { accountId } = useCurrentAccount()
   return useMutation({
-    mutationFn: (data: HoldingCreate) => holdingsApi.createHolding(data),
+    mutationFn: (data: HoldingCreate) => holdingsApi.createHolding(data, accountId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['holdings'] })
       qc.invalidateQueries({ queryKey: ['portfolio'] })

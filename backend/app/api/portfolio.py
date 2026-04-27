@@ -15,9 +15,10 @@ router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 @router.get("/summary", response_model=PortfolioSummary)
 def get_summary(
     base_currency: str = Query(default="CNY"),
+    account_id: int = Query(default=1),
     db: Session = Depends(get_db),
 ):
-    holdings = holding_service.get_all_holdings(db)
+    holdings = holding_service.get_all_holdings(db, account_id=account_id)
 
     holding_summaries = []
     total_market_value = 0.0
@@ -91,6 +92,7 @@ def get_summary(
     # Also include deleted holdings' transactions (holding_id still in DB if cascade didn't clean)
     all_txs = list(db.scalars(
         select(Transaction)
+        .where(Transaction.account_id == account_id)
         .where(Transaction.holding_id.isnot(None))
         .order_by(Transaction.transacted_at.asc())
     ).all())
@@ -133,7 +135,7 @@ def get_summary(
         total_realized_pnl += realized_native * fx_rate
 
     # Cash balances
-    cash_rows = cash_service.get_all_balances(db)
+    cash_rows = cash_service.get_all_balances(db, account_id)
     cash_balances_map: dict[str, float] = {}
     total_cash = 0.0
     for cb in cash_rows:

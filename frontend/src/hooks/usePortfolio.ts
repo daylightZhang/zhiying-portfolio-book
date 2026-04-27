@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import * as portfolioApi from '../api/portfolio'
+import { useCurrentAccount } from './useAccount'
 
 const CURRENCY_KEY = 'zhiying_base_currency'
 
@@ -15,16 +16,18 @@ export function useBaseCurrency() {
 }
 
 export function usePortfolioSummary(baseCurrency: string) {
+  const { accountId } = useCurrentAccount()
   return useQuery({
-    queryKey: ['portfolio', 'summary', baseCurrency],
-    queryFn: () => portfolioApi.getPortfolioSummary(baseCurrency),
+    queryKey: ['portfolio', 'summary', accountId, baseCurrency],
+    queryFn: () => portfolioApi.getPortfolioSummary(baseCurrency, accountId),
   })
 }
 
 export function useRefreshPrices() {
   const qc = useQueryClient()
+  const { accountId } = useCurrentAccount()
   return useMutation({
-    mutationFn: portfolioApi.refreshPrices,
+    mutationFn: () => portfolioApi.refreshPrices(accountId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portfolio'] })
       qc.invalidateQueries({ queryKey: ['holdings'] })

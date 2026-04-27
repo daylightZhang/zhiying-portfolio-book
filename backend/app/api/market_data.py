@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,13 +8,13 @@ router = APIRouter(prefix="/market-data", tags=["market-data"])
 
 
 @router.post("/refresh")
-def refresh_all(db: Session = Depends(get_db)):
-    return market_data_service.refresh_all_prices(db)
+def refresh_all(account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    return market_data_service.refresh_all_prices(db, account_id)
 
 
 @router.post("/refresh/{symbol}")
-def refresh_single(symbol: str, db: Session = Depends(get_db)):
-    return market_data_service.refresh_single_price(db, symbol)
+def refresh_single(symbol: str, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    return market_data_service.refresh_single_price(db, symbol, account_id)
 
 
 @router.get("/quote/{symbol}")

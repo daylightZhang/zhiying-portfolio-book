@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,9 +14,10 @@ def list_transactions(
     type: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    account_id: int = Query(default=1),
     db: Session = Depends(get_db),
 ):
-    txs = transaction_service.get_transactions(db, holding_id, type, limit, offset)
+    txs = transaction_service.get_transactions(db, holding_id, type, limit, offset, account_id)
     result = []
     for tx in txs:
         data = TransactionResponse.model_validate(tx)
@@ -31,8 +32,8 @@ def list_transactions(
 
 
 @router.post("", response_model=TransactionResponse, status_code=201)
-def create_transaction(data: TransactionCreate, db: Session = Depends(get_db)):
-    tx = transaction_service.create_transaction(db, data)
+def create_transaction(data: TransactionCreate, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    tx = transaction_service.create_transaction(db, data, account_id)
     if not tx:
         raise HTTPException(status_code=404, detail="Holding not found")
     resp = TransactionResponse.model_validate(tx)

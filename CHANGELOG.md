@@ -1,5 +1,29 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-04-27 v1.6.0 - 多账户 + 设置页面 + 价格精度
+
+### 新增
+- **多账户支持**: 侧边栏下拉切换账户，无需登录认证
+  - 新建 `accounts` 表，默认创建"默认账户" (id=1)
+  - `holdings`、`transactions`、`cash_balances` 三张表加 `account_id` 列
+  - 所有 API 端点和 Service 层按 account_id 隔离数据
+  - 前端 AccountContext 贯穿所有 hooks 和 API 调用
+  - 侧边栏账户选择器: 切换/新建/删除账户
+- **设置弹窗**: 侧边栏底部"设置"按钮，全屏居中弹窗
+  - 修改账户名称
+  - 主题切换 (从侧边栏底部移入设置弹窗，2×2 网格展示)
+  - 预留扩展区域
+
+### 修改
+- **持仓明细价格精度**: 成本价和现价显示 3 位小数
+
+### 新文件
+- `backend/app/models/account.py`, `backend/app/schemas/account.py`, `backend/app/api/accounts.py`
+- `frontend/src/api/accounts.ts`, `frontend/src/hooks/useAccount.ts`
+- `frontend/src/components/layout/SettingsDialog.tsx`
+
+---
+
 ## 2026-04-27 v1.5.2 - 期货保证金计算
 
 ### 新增

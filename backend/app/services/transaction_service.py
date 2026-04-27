@@ -15,8 +15,9 @@ def get_transactions(
     tx_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    account_id: int = 1,
 ) -> list[Transaction]:
-    stmt = select(Transaction)
+    stmt = select(Transaction).where(Transaction.account_id == account_id)
     if holding_id:
         stmt = stmt.where(Transaction.holding_id == holding_id)
     if tx_type:
@@ -25,7 +26,7 @@ def get_transactions(
     return list(db.scalars(stmt).all())
 
 
-def create_transaction(db: Session, data: TransactionCreate) -> Transaction | None:
+def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1) -> Transaction | None:
     if data.holding_id is None:
         return None
 
@@ -37,6 +38,7 @@ def create_transaction(db: Session, data: TransactionCreate) -> Transaction | No
     trade_amount = data.quantity * data.price * multiplier
 
     tx = Transaction(
+        account_id=account_id,
         holding_id=data.holding_id,
         type=data.type.value,
         quantity=data.quantity,
@@ -53,10 +55,10 @@ def create_transaction(db: Session, data: TransactionCreate) -> Transaction | No
         if new_qty > 0:
             holding.cost_price = (holding.quantity * holding.cost_price + data.quantity * data.price) / new_qty
         holding.quantity = new_qty
-        cash_service.on_buy(db, holding.currency, trade_amount)
+        cash_service.on_buy(db, holding.currency, trade_amount, account_id)
     elif data.type.value == "SELL":
         holding.quantity = max(0, holding.quantity - data.quantity)
-        cash_service.on_sell(db, holding.currency, trade_amount)
+        cash_service.on_sell(db, holding.currency, trade_amount, account_id)
     elif data.type.value == "ADJUST":
         holding.quantity = data.quantity
         holding.cost_price = data.price
@@ -71,8 +73,9 @@ def count_transactions(
     db: Session,
     holding_id: int | None = None,
     tx_type: str | None = None,
+    account_id: int = 1,
 ) -> int:
-    stmt = select(Transaction)
+    stmt = select(Transaction).where(Transaction.account_id == account_id)
     if holding_id:
         stmt = stmt.where(Transaction.holding_id == holding_id)
     if tx_type:

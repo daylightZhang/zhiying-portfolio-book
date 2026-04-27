@@ -1,15 +1,15 @@
 import client from './client'
 import type { PortfolioSummary } from '../types/portfolio'
 
-export async function getPortfolioSummary(baseCurrency: string): Promise<PortfolioSummary> {
+export async function getPortfolioSummary(baseCurrency: string, accountId: number = 1): Promise<PortfolioSummary> {
   const { data } = await client.get('/portfolio/summary', {
-    params: { base_currency: baseCurrency },
+    params: { base_currency: baseCurrency, account_id: accountId },
   })
   return data
 }
 
-export async function refreshPrices(): Promise<Record<string, unknown>> {
-  const { data } = await client.post('/market-data/refresh')
+export async function refreshPrices(accountId: number = 1): Promise<Record<string, unknown>> {
+  const { data } = await client.post('/market-data/refresh', null, { params: { account_id: accountId } })
   return data
 }
 
@@ -24,17 +24,17 @@ export interface CashBalance {
   updated_at: string
 }
 
-export async function getCashBalances(): Promise<CashBalance[]> {
-  const { data } = await client.get('/cash')
+export async function getCashBalances(accountId: number = 1): Promise<CashBalance[]> {
+  const { data } = await client.get('/cash', { params: { account_id: accountId } })
   return data
 }
 
-export async function deposit(currency: string, amount: number, notes?: string): Promise<CashBalance> {
-  const { data } = await client.post('/cash/deposit', { currency, amount, notes })
+export async function deposit(currency: string, amount: number, notes?: string, accountId: number = 1): Promise<CashBalance> {
+  const { data } = await client.post('/cash/deposit', { currency, amount, notes }, { params: { account_id: accountId } })
   return data
 }
 
-export async function withdraw(currency: string, amount: number, notes?: string): Promise<CashBalance> {
-  const { data } = await client.post('/cash/withdraw', { currency, amount, notes })
+export async function withdraw(currency: string, amount: number, notes?: string, accountId: number = 1): Promise<CashBalance> {
+  const { data } = await client.post('/cash/withdraw', { currency, amount, notes }, { params: { account_id: accountId } })
   return data
 }

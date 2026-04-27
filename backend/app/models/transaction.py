@@ -9,6 +9,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False, default=1, index=True)
     holding_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("holdings.id", ondelete="CASCADE"), nullable=True, index=True)
     type: Mapped[str] = mapped_column(String(10), nullable=False)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
