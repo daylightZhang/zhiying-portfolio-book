@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey, UniqueConstraint, func
+from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -7,7 +7,7 @@ from app.database import Base
 
 class Holding(Base):
     __tablename__ = "holdings"
-    __table_args__ = (UniqueConstraint("account_id", "symbol", "market", name="uq_account_symbol_market"),)
+    __table_args__: tuple = ()
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False, default=1, index=True)

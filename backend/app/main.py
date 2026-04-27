@@ -34,8 +34,53 @@ def _migrate_db():
             conn.execute(text("UPDATE holdings SET market = 'A_SHARE' WHERE market IN ('A_SHARE_SH', 'A_SHARE_SZ')"))
             conn.execute(text("UPDATE holdings SET market = 'CN_FUTURES' WHERE market = 'FUTURES'"))
 
-            if "account_id" not in columns:
-                conn.execute(text("ALTER TABLE holdings ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1"))
+            # Rebuild if missing account_id or has old unique constraint
+            schema_sql = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='holdings'")).fetchone()[0]
+            needs_rebuild = "account_id" not in columns or "UNIQUE" in schema_sql
+
+            if needs_rebuild:
+                conn.execute(text("""
+                    CREATE TABLE holdings_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        account_id INTEGER NOT NULL DEFAULT 1,
+                        symbol VARCHAR(20) NOT NULL,
+                        name VARCHAR(100) NOT NULL,
+                        market VARCHAR(20) NOT NULL,
+                        quantity REAL NOT NULL DEFAULT 0,
+                        cost_price REAL NOT NULL DEFAULT 0,
+                        currency VARCHAR(3) NOT NULL,
+                        current_price REAL,
+                        price_updated_at TIMESTAMP,
+                        holding_ratio REAL NOT NULL DEFAULT 1.0,
+                        contract_multiplier REAL NOT NULL DEFAULT 1.0,
+                        margin_rate REAL NOT NULL DEFAULT 0.0,
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    )
+                """))
+                # Copy data, filling account_id=1 for rows that don't have it
+                old_cols = [c["name"] for c in inspector.get_columns("holdings")]
+                if "account_id" in old_cols:
+                    conn.execute(text("""
+                        INSERT INTO holdings_new (id, account_id, symbol, name, market, quantity, cost_price, currency,
+                            current_price, price_updated_at, holding_ratio, contract_multiplier, margin_rate, notes, created_at, updated_at)
+                        SELECT id, account_id, symbol, name, market, quantity, cost_price, currency,
+                            current_price, price_updated_at,
+                            COALESCE(holding_ratio, 1.0), COALESCE(contract_multiplier, 1.0), COALESCE(margin_rate, 0.0),
+                            notes, created_at, updated_at FROM holdings
+                    """))
+                else:
+                    conn.execute(text("""
+                        INSERT INTO holdings_new (id, account_id, symbol, name, market, quantity, cost_price, currency,
+                            current_price, price_updated_at, holding_ratio, contract_multiplier, margin_rate, notes, created_at, updated_at)
+                        SELECT id, 1, symbol, name, market, quantity, cost_price, currency,
+                            current_price, price_updated_at,
+                            COALESCE(holding_ratio, 1.0), COALESCE(contract_multiplier, 1.0), COALESCE(margin_rate, 0.0),
+                            notes, created_at, updated_at FROM holdings
+                    """))
+                conn.execute(text("DROP TABLE holdings"))
+                conn.execute(text("ALTER TABLE holdings_new RENAME TO holdings"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_holdings_account_id ON holdings(account_id)"))
 
         if "transactions" in tables:
@@ -72,8 +117,32 @@ def _migrate_db():
 
         if "cash_balances" in tables:
             cb_cols = [c["name"] for c in inspector.get_columns("cash_balances")]
-            if "account_id" not in cb_cols:
-                conn.execute(text("ALTER TABLE cash_balances ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1"))
+            cb_schema = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='cash_balances'")).fetchone()[0]
+            cb_needs_rebuild = "account_id" not in cb_cols or "uq_cash_currency" in cb_schema
+
+            if cb_needs_rebuild:
+                conn.execute(text("""
+                    CREATE TABLE cash_balances_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        account_id INTEGER NOT NULL DEFAULT 1,
+                        currency VARCHAR(3) NOT NULL,
+                        balance REAL NOT NULL DEFAULT 0,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        CONSTRAINT uq_account_currency UNIQUE (account_id, currency)
+                    )
+                """))
+                if "account_id" in cb_cols:
+                    conn.execute(text("""
+                        INSERT INTO cash_balances_new (id, account_id, currency, balance, updated_at)
+                        SELECT id, account_id, currency, balance, updated_at FROM cash_balances
+                    """))
+                else:
+                    conn.execute(text("""
+                        INSERT INTO cash_balances_new (id, account_id, currency, balance, updated_at)
+                        SELECT id, 1, currency, balance, updated_at FROM cash_balances
+                    """))
+                conn.execute(text("DROP TABLE cash_balances"))
+                conn.execute(text("ALTER TABLE cash_balances_new RENAME TO cash_balances"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cash_balances_account_id ON cash_balances(account_id)"))
 
         conn.commit()

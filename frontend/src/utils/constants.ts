@@ -3,6 +3,7 @@ export const MARKETS = [
   { value: 'HK', label: '港股', currency: 'HKD', hint: '如 0700.HK' },
   { value: 'US', label: '美股', currency: 'USD', hint: '如 AAPL' },
   { value: 'FR', label: '法股', currency: 'EUR', hint: '如 MC.PA' },
+  { value: 'DE', label: '德股', currency: 'EUR', hint: '如 SAP.DE' },
   { value: 'SE', label: '瑞典股', currency: 'SEK', hint: '如 VOLV-B.ST' },
   { value: 'CN_FUTURES', label: '中国期货', currency: 'CNY', hint: '品种+年月 或 品种+0(主力)' },
 ] as const
@@ -34,6 +35,7 @@ export const MARKET_COLORS: Record<string, string> = {
   HK: 'bg-orange-500/20 text-orange-400',
   US: 'bg-blue-500/20 text-blue-400',
   FR: 'bg-indigo-500/20 text-indigo-400',
+  DE: 'bg-emerald-500/20 text-emerald-400',
   SE: 'bg-yellow-500/20 text-yellow-400',
   CN_FUTURES: 'bg-amber-500/20 text-amber-400',
   FUTURES: 'bg-amber-500/20 text-amber-400',
@@ -46,6 +48,7 @@ export const MARKET_LABELS: Record<string, string> = {
   HK: '港股',
   US: '美股',
   FR: '法股',
+  DE: '德股',
   SE: '瑞典股',
   CN_FUTURES: '中国期货',
   FUTURES: '中国期货',

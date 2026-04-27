@@ -14,6 +14,7 @@ class Market(str, enum.Enum):
     HK = "HK"
     US = "US"
     FR = "FR"
+    DE = "DE"
     SE = "SE"
     CN_FUTURES = "CN_FUTURES"
 
@@ -31,6 +32,7 @@ MARKET_CURRENCY_MAP: dict[Market, Currency] = {
     Market.HK: Currency.HKD,
     Market.US: Currency.USD,
     Market.FR: Currency.EUR,
+    Market.DE: Currency.EUR,
     Market.SE: Currency.SEK,
     Market.CN_FUTURES: Currency.CNY,
 }
@@ -42,6 +44,7 @@ MARKET_LABELS: dict[str, str] = {
     "HK": "港股",
     "US": "美股",
     "FR": "法股",
+    "DE": "德股",
     "SE": "瑞典股",
     "CN_FUTURES": "中国期货",
     "FUTURES": "中国期货",
@@ -52,10 +55,11 @@ MARKET_TICKER_HINTS: dict[Market, str] = {
     Market.HK: "如 0700.HK",
     Market.US: "如 AAPL",
     Market.FR: "如 MC.PA",
+    Market.DE: "如 SAP.DE",
     Market.SE: "如 VOLV-B.ST",
     Market.CN_FUTURES: "如 IF0(主力), IF2406(合约)",
 }
 
 # AKShare 使用的市场标识
 AKSHARE_MARKETS = {Market.A_SHARE, Market.CN_FUTURES}
-YFINANCE_MARKETS = {Market.HK, Market.US, Market.FR, Market.SE}
+YFINANCE_MARKETS = {Market.HK, Market.US, Market.FR, Market.DE, Market.SE}

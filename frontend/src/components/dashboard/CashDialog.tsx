@@ -57,7 +57,6 @@ export default function CashDialog({ open, mode, onClose, onSubmit }: Props) {
             <input
               type="number"
               step="any"
-              min="0.01"
               value={amount}
               onChange={e => setAmount(e.target.value)}
               required
