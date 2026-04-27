@@ -2,6 +2,12 @@
 
 个人投资组合追踪 Web 应用，支持多市场、多币种持仓管理与行情查询。
 
+## 开发工作流
+
+每次完成修改后，必须执行以下步骤：
+1. 将改动记录到 `CHANGELOG.md`（版本号递增，描述新增/修改/修复内容）
+2. 提交 git commit（commit message 包含版本号和改动摘要）
+
 ## 技术栈
 
 - **后端**: Python 3 + FastAPI + SQLAlchemy 2.0 + SQLite + yfinance
