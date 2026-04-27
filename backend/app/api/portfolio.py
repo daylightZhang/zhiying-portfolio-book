@@ -34,8 +34,8 @@ def get_summary(
 
         if h.market == "CN_FUTURES":
             margin_rate = getattr(h, 'margin_rate', 0.0) or 0.0
-            margin_occupied = h.quantity * h.cost_price * multiplier * margin_rate
-            unrealized_pnl = (price - h.cost_price) * multiplier * h.quantity
+            margin_occupied = h.quantity * h.cost_price * multiplier * margin_rate * ratio
+            unrealized_pnl = (price - h.cost_price) * multiplier * h.quantity * ratio
             market_value_native = margin_occupied + unrealized_pnl
             cost_total_native = margin_occupied
         else:
@@ -121,7 +121,7 @@ def get_summary(
                 running_qty += tx.quantity
             elif tx.type == "SELL":
                 if is_futures:
-                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier
+                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
                 else:
                     realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
                 running_qty = max(0, running_qty - tx.quantity)
