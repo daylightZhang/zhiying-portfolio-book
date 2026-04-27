@@ -12,7 +12,7 @@ import EmptyState from '../components/common/EmptyState'
 import { timeAgo, formatCountdown, formatDateTime } from '../utils/format'
 import { useNavigate } from 'react-router-dom'
 
-const REFRESH_INTERVAL = 30 * 60
+const REFRESH_INTERVAL = 5 * 60
 
 export default function DashboardPage() {
   const [baseCurrency, setBaseCurrency] = useBaseCurrency()

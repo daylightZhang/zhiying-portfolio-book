@@ -88,6 +88,94 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
     return tx
 
 
+def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transaction | None:
+    """Rollback a transaction by creating a reverse operation."""
+    tx = db.get(Transaction, tx_id)
+    if not tx or tx.account_id != account_id:
+        return None
+
+    now = now_beijing()
+
+    if tx.type == "BUY" and tx.holding_id:
+        holding = db.get(Holding, tx.holding_id)
+        if not holding:
+            return None
+        # Reverse BUY: reduce quantity, add cash back
+        holding.quantity = max(0, holding.quantity - tx.quantity)
+        multiplier = holding.contract_multiplier or 1.0
+        cash_service.on_sell(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+        # Recalc cost: replay all remaining BUY transactions
+        _recalc_cost(db, holding)
+        reverse = Transaction(
+            account_id=account_id, holding_id=tx.holding_id, type="SELL",
+            quantity=tx.quantity, price=tx.price, total_amount=tx.total_amount,
+            currency=tx.currency, notes=f"回滚买入 #{tx.id}", transacted_at=now,
+        )
+
+    elif tx.type == "SELL" and tx.holding_id:
+        holding = db.get(Holding, tx.holding_id)
+        if not holding:
+            return None
+        # Reverse SELL: add quantity back, deduct cash
+        new_qty = holding.quantity + tx.quantity
+        if new_qty > 0:
+            holding.cost_price = (holding.quantity * holding.cost_price + tx.quantity * tx.price) / new_qty
+        holding.quantity = new_qty
+        multiplier = holding.contract_multiplier or 1.0
+        cash_service.on_buy(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+        reverse = Transaction(
+            account_id=account_id, holding_id=tx.holding_id, type="BUY",
+            quantity=tx.quantity, price=tx.price, total_amount=tx.total_amount,
+            currency=tx.currency, notes=f"回滚卖出 #{tx.id}", transacted_at=now,
+        )
+
+    elif tx.type == "DEPOSIT":
+        # Reverse DEPOSIT: withdraw
+        cash_service._update_balance(db, tx.currency or "CNY", -tx.price, account_id)
+        reverse = Transaction(
+            account_id=account_id, holding_id=None, type="WITHDRAW",
+            quantity=1, price=tx.price, total_amount=tx.price,
+            currency=tx.currency, notes=f"回滚入金 #{tx.id}", transacted_at=now,
+        )
+
+    elif tx.type == "WITHDRAW":
+        # Reverse WITHDRAW: deposit
+        cash_service._update_balance(db, tx.currency or "CNY", tx.price, account_id)
+        reverse = Transaction(
+            account_id=account_id, holding_id=None, type="DEPOSIT",
+            quantity=1, price=tx.price, total_amount=tx.price,
+            currency=tx.currency, notes=f"回滚出金 #{tx.id}", transacted_at=now,
+        )
+
+    else:
+        return None
+
+    db.add(reverse)
+    if tx.holding_id:
+        holding = db.get(Holding, tx.holding_id)
+        if holding:
+            holding.updated_at = now
+    db.commit()
+    db.refresh(reverse)
+    return reverse
+
+
+def _recalc_cost(db: Session, holding: Holding):
+    """Recalculate average cost by replaying all BUY transactions."""
+    txs = list(db.scalars(
+        select(Transaction)
+        .where(Transaction.holding_id == holding.id, Transaction.type == "BUY")
+        .order_by(Transaction.transacted_at.asc())
+    ).all())
+    running_qty = 0.0
+    running_cost = 0.0
+    for t in txs:
+        if running_qty + t.quantity > 0:
+            running_cost = (running_qty * running_cost + t.quantity * t.price) / (running_qty + t.quantity)
+        running_qty += t.quantity
+    holding.cost_price = running_cost if running_qty > 0 else 0.0
+
+
 def count_transactions(
     db: Session,
     holding_id: int | None = None,

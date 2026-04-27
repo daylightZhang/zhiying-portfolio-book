@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useTransactions } from '../hooks/useTransactions'
+import { useTransactions, useRollbackTransaction } from '../hooks/useTransactions'
+import { useToast } from '../hooks/useToast'
 import { useHoldings } from '../hooks/useHoldings'
 import TransactionList from '../components/transactions/TransactionList'
 import CustomSelect from '../components/common/CustomSelect'
@@ -25,6 +26,8 @@ export default function HistoryPage() {
   const [endDate, setEndDate] = useState('')
   const [page, setPage] = useState(0)
 
+  const { showToast } = useToast()
+  const rollbackMut = useRollbackTransaction()
   const { data: holdings } = useHoldings()
   const { data, isLoading } = useTransactions({
     holding_id: holdingId ? Number(holdingId) : undefined,
@@ -111,7 +114,12 @@ export default function HistoryPage() {
       ) : (
         <div className="space-y-3">
           <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
-            <TransactionList transactions={transactions} />
+            <TransactionList transactions={transactions} onRollback={(txId) => {
+              rollbackMut.mutate(txId, {
+                onSuccess: () => showToast('回滚成功'),
+                onError: () => showToast('回滚失败', 'error'),
+              })
+            }} />
           </div>
 
           {/* Pagination */}

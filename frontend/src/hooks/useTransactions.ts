@@ -30,3 +30,16 @@ export function useCreateTransaction() {
     },
   })
 }
+
+export function useRollbackTransaction() {
+  const qc = useQueryClient()
+  const { accountId } = useCurrentAccount()
+  return useMutation({
+    mutationFn: (txId: number) => txApi.rollbackTransaction(txId, accountId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['holdings'] })
+      qc.invalidateQueries({ queryKey: ['portfolio'] })
+    },
+  })
+}
