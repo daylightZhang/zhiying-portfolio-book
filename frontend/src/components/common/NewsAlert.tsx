@@ -9,10 +9,12 @@ export default function NewsAlert() {
   const { data: items } = useFlashNews()
   const navigate = useNavigate()
   const location = useLocation()
-  const [alert, setAlert] = useState<{ id: string; full: string; short: string } | null>(null)
+  const [alert, setAlert] = useState<{ id: string; text: string } | null>(null)
   const [hovered, setHovered] = useState(false)
   const lastSeenId = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const contentRef = useRef<HTMLSpanElement>(null)
+  const [expandedHeight, setExpandedHeight] = useState(20)
 
   const startDismissTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -34,14 +36,22 @@ export default function NewsAlert() {
     if (!content) return
 
     const text = content.replace(/<[^>]*>/g, '')
-    setAlert({
-      id: newest.id,
-      full: text,
-      short: text.length > 80 ? text.slice(0, 80) + '...' : text,
-    })
+    setAlert({ id: newest.id, text })
     setHovered(false)
     startDismissTimer()
   }, [items, location.pathname])
+
+  // Measure full content height when alert changes
+  useEffect(() => {
+    if (alert && contentRef.current) {
+      // Temporarily remove max-height to measure
+      const el = contentRef.current
+      const prev = el.style.maxHeight
+      el.style.maxHeight = 'none'
+      setExpandedHeight(el.scrollHeight)
+      el.style.maxHeight = prev
+    }
+  }, [alert])
 
   // Pause/resume timer on hover
   useEffect(() => {
@@ -60,15 +70,20 @@ export default function NewsAlert() {
       onClick={() => { setAlert(null); navigate('/news') }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2.5 rounded-xl bg-bg-card/95 border border-accent/30 px-4 py-3 shadow-xl glass animate-slideUp cursor-pointer hover:border-accent/60 transition-all ${hovered ? 'max-w-2xl' : 'max-w-lg'}`}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-start gap-2.5 rounded-xl bg-bg-card/95 border border-accent/30 px-4 py-3 shadow-xl glass animate-slideUp cursor-pointer hover:border-accent/60 transition-all duration-300 ease-in-out"
+      style={{ maxWidth: hovered ? '42rem' : '32rem' }}
     >
-      <Newspaper size={16} className="text-accent shrink-0" />
-      <span className={`text-sm text-t-primary ${hovered ? '' : 'line-clamp-1'}`}>
-        {hovered ? alert.full : alert.short}
+      <Newspaper size={16} className="text-accent shrink-0 mt-0.5" />
+      <span
+        ref={contentRef}
+        className="text-sm text-t-primary overflow-hidden transition-all duration-300 ease-in-out"
+        style={{ maxHeight: hovered ? `${expandedHeight}px` : '1.25rem' }}
+      >
+        {alert.text}
       </span>
       <button
         onClick={e => { e.stopPropagation(); setAlert(null) }}
-        className="text-t-faint hover:text-t-secondary shrink-0 ml-1"
+        className="text-t-faint hover:text-t-secondary shrink-0 ml-1 mt-0.5"
       >
         <X size={14} />
       </button>
