@@ -1,7 +1,7 @@
 import { useMarketIndices } from '../../hooks/useMarketIndices'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 
-export default function MarketTicker() {
+export default function MarketTicker({ collapsed = false }: { collapsed?: boolean }) {
   const { data: indices } = useMarketIndices()
 
   if (!indices || indices.length === 0) return null
@@ -9,7 +9,7 @@ export default function MarketTicker() {
   const items = [...indices, ...indices]
 
   return (
-    <div className="fixed bottom-0 left-56 right-0 z-30 h-9 overflow-hidden border-t border-border-subtle bg-bg-card/80 glass">
+    <div className={`fixed bottom-0 right-0 z-50 h-9 overflow-hidden border-t border-border-subtle bg-bg-card/80 glass transition-all duration-300 ${collapsed ? 'left-16' : 'left-56'}`}>
       <div className="flex h-full animate-marquee whitespace-nowrap">
         {items.map((idx, i) => {
           const isUp = idx.change >= 0

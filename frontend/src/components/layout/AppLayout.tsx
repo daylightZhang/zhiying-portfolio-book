@@ -27,7 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className={`flex-1 p-6 pb-14 transition-all duration-300 ${collapsed ? 'ml-16' : 'ml-56'}`}>
         {children}
       </main>
-      <MarketTicker />
+      <MarketTicker collapsed={collapsed} />
       <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} theme={themeCtx.theme} onThemeChange={themeCtx.setTheme} />
     </div>
   )
