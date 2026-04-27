@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useHoldings, useCreateHolding, useUpdateHolding, useDeleteHolding } from '../hooks/useHoldings'
 import { useCreateTransaction } from '../hooks/useTransactions'
 import HoldingForm from '../components/holdings/HoldingForm'
@@ -14,10 +14,16 @@ import { useToast } from '../hooks/useToast'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
 const FILTERS = [{ value: '', label: '全部' }, ...MARKETS.map(m => ({ value: m.value, label: m.label }))]
+const PAGE_SIZE = 10
+
+function holdingMarketValue(h: Holding): number {
+  return (h.current_price || 0) * h.quantity * (h.contract_multiplier || 1) * (h.holding_ratio || 1)
+}
 
 export default function HoldingsPage() {
   const [marketFilter, setMarketFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
   const [deleting, setDeleting] = useState<Holding | null>(null)
@@ -75,7 +81,7 @@ export default function HoldingsPage() {
           {FILTERS.map(f => (
             <button
               key={f.value}
-              onClick={() => setMarketFilter(f.value)}
+              onClick={() => { setMarketFilter(f.value); setPage(0) }}
               className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                 marketFilter === f.value
                   ? 'bg-accent-bg text-accent'
@@ -90,7 +96,7 @@ export default function HoldingsPage() {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t-faint" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(0) }}
             placeholder="搜索名称或代码"
             className="rounded-lg border border-border bg-input-bg pl-8 pr-3 py-1.5 text-xs text-t-primary outline-none focus:border-accent transition-colors placeholder:text-t-faint w-44"
           />
@@ -102,7 +108,9 @@ export default function HoldingsPage() {
         const kw = search.trim().toLowerCase()
         const filtered = holdings?.filter(h =>
           !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
-        )
+        )?.sort((a, b) => holdingMarketValue(b) - holdingMarketValue(a))
+        const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / PAGE_SIZE))
+        const paged = filtered?.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
         return isLoading ? (
         <LoadingSpinner />
       ) : !filtered || filtered.length === 0 ? (
@@ -135,7 +143,7 @@ export default function HoldingsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(h => {
+              {paged?.map(h => {
                 const currSymbol = CURRENCY_SYMBOLS[h.currency] || ''
                 return (
                   <tr key={h.id} className="border-b border-border-subtle hover:bg-bg-hover/50 transition-colors duration-150">
@@ -188,6 +196,20 @@ export default function HoldingsPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between text-xs text-t-muted mt-3">
+            <span>共 {filtered?.length || 0} 个持仓</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rounded-lg p-1.5 hover:bg-bg-hover disabled:opacity-30 transition-colors">
+                <ChevronLeft size={16} />
+              </button>
+              <span className="tabular-nums">{page + 1} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-lg p-1.5 hover:bg-bg-hover disabled:opacity-30 transition-colors">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       )
       })()}
 
