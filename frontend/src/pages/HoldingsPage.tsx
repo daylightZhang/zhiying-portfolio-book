@@ -5,6 +5,7 @@ import { useCreateTransaction } from '../hooks/useTransactions'
 import HoldingForm from '../components/holdings/HoldingForm'
 import TradeDialog from '../components/holdings/TradeDialog'
 import MarketBadge from '../components/holdings/MarketBadge'
+import GainLossText from '../components/common/GainLossText'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmptyState from '../components/common/EmptyState'
@@ -18,6 +19,17 @@ const PAGE_SIZE = 10
 
 function holdingMarketValue(h: Holding): number {
   return (h.current_price || 0) * h.quantity * (h.contract_multiplier || 1) * (h.holding_ratio || 1)
+}
+
+function holdingGainLoss(h: Holding): { value: number; pct: number } {
+  const price = h.current_price || 0
+  const mult = h.contract_multiplier || 1
+  const ratio = h.holding_ratio || 1
+  const mv = price * h.quantity * mult * ratio
+  const cost = h.cost_price * h.quantity * mult * ratio
+  const gl = mv - cost
+  const pct = cost !== 0 ? (gl / cost) * 100 : 0
+  return { value: gl, pct }
 }
 
 export default function HoldingsPage() {
@@ -140,6 +152,7 @@ export default function HoldingsPage() {
                 <th className="px-4 py-3 text-right">比例</th>
                 <th className="px-4 py-3 text-right">成本价</th>
                 <th className="px-4 py-3 text-right">现价</th>
+                <th className="px-4 py-3 text-right">盈亏</th>
                 <th className="px-4 py-3 text-right">操作</th>
               </tr>
             </thead>
@@ -158,6 +171,9 @@ export default function HoldingsPage() {
                     <td className="px-4 py-3 text-right text-t-secondary">{currSymbol}{formatNumber(h.cost_price)}</td>
                     <td className="px-4 py-3 text-right text-t-primary font-medium">
                       {h.current_price !== null ? `${currSymbol}${formatNumber(h.current_price)}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {h.current_price !== null ? (() => { const gl = holdingGainLoss(h); return <GainLossText value={gl.value} percent={gl.pct} size="sm" showIcon={false} /> })() : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
