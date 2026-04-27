@@ -27,7 +27,7 @@ function App() {
         {toastState.toast && (
           <div className="fixed top-4 right-4 z-[100] flex items-center gap-2 rounded-xl bg-bg-card/95 border border-border-subtle px-4 py-3 shadow-xl glass animate-slideUp">
             {toastState.toast.type === 'success'
-              ? <CheckCircle2 size={16} className="text-gain shrink-0" />
+              ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
               : <XCircle size={16} className="text-loss shrink-0" />
             }
             <span className="text-sm text-t-primary">{toastState.toast.message}</span>

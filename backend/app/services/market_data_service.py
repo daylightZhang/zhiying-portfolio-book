@@ -48,11 +48,11 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 pass
 
         else:
-            # International: finance-query (fastest) → yfinance → akshare-us
+            # International: google-finance (realtime) → yfinance (realtime) → finance-query (delayed) → akshare-us
             try:
-                price = _finance_query_price(symbol)
+                price = _google_finance_price(symbol)
                 if price:
-                    return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "google-finance"}
             except Exception:
                 pass
             try:
@@ -60,6 +60,12 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
                 if price:
                     return {"symbol": symbol, "price": float(price), "status": "ok", "source": "yfinance"}
+            except Exception:
+                pass
+            try:
+                price = _finance_query_price(symbol)
+                if price:
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
             except Exception:
                 pass
             if h.market == "US":
@@ -70,6 +76,9 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 except Exception:
                     pass
 
+        # All online sources failed — keep DB cached price
+        if h.current_price is not None:
+            return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
         return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
     # All holdings in parallel, one thread each
@@ -360,7 +369,18 @@ def _refresh_single_akshare(db: Session, holdings: list[Holding], now: datetime)
 
 
 def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, now: datetime) -> dict:
-    # Try yfinance
+    # google-finance (realtime) → yfinance (realtime) → finance-query (delayed) → akshare-us
+    try:
+        price = _google_finance_price(symbol)
+        if price:
+            for h in holdings:
+                h.current_price = price
+                h.price_updated_at = now
+            db.commit()
+            return {"symbol": symbol, "price": price, "status": "ok", "source": "google-finance"}
+    except Exception:
+        pass
+
     try:
         ticker = yf.Ticker(symbol)
         price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
@@ -374,7 +394,6 @@ def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, 
     except Exception:
         pass
 
-    # Try finance-query
     try:
         price = _finance_query_price(symbol)
         if price:
@@ -386,7 +405,6 @@ def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, 
     except Exception:
         pass
 
-    # Try akshare for US stocks
     if holdings[0].market == "US":
         try:
             price = _akshare_us_stock_price(symbol)
@@ -399,6 +417,10 @@ def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, 
         except Exception:
             pass
 
+    # All failed — keep DB cached price
+    h = holdings[0]
+    if h.current_price is not None:
+        return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
     return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
 
@@ -439,6 +461,45 @@ def get_market_indices() -> list[dict]:
         return _indices_cache
 
     return results
+
+
+def _google_finance_price(symbol: str) -> float | None:
+    """Get price from Google Finance by scraping data-last-price attribute."""
+    import httpx, re
+    EXCHANGE_MAP = {
+        ".ST": ":STO", ".PA": ":EPA", ".DE": ":ETR", ".HK": ":HKG",
+    }
+    gf_symbol = None
+    for suffix, exchange in EXCHANGE_MAP.items():
+        if symbol.endswith(suffix):
+            gf_symbol = symbol.replace(suffix, exchange)
+            break
+    if not gf_symbol:
+        # US stocks: try NASDAQ then NYSE
+        for exchange in ["NASDAQ", "NYSE", "NYSEARCA"]:
+            try:
+                resp = httpx.get(
+                    f"https://www.google.com/finance/quote/{symbol}:{exchange}?hl=zh",
+                    timeout=8,
+                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                )
+                if resp.status_code == 200:
+                    m = re.search(r'data-last-price="([0-9.]+)"', resp.text)
+                    if m:
+                        return float(m.group(1))
+            except Exception:
+                continue
+        return None
+    resp = httpx.get(
+        f"https://www.google.com/finance/quote/{gf_symbol}?hl=zh",
+        timeout=8,
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+    )
+    if resp.status_code == 200:
+        m = re.search(r'data-last-price="([0-9.]+)"', resp.text)
+        if m:
+            return float(m.group(1))
+    return None
 
 
 def _finance_query_price(symbol: str) -> float | None:

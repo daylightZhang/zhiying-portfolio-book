@@ -67,6 +67,8 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
     if not holding:
         return None
 
+    if data.symbol is not None:
+        holding.symbol = data.symbol.strip()
     if data.name is not None:
         holding.name = data.name.strip()
     if data.notes is not None:

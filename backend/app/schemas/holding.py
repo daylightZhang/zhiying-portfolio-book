@@ -19,6 +19,7 @@ class HoldingCreate(BaseModel):
 
 
 class HoldingUpdate(BaseModel):
+    symbol: str | None = None
     name: str | None = None
     quantity: float | None = None
     cost_price: float | None = None

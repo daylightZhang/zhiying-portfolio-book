@@ -78,6 +78,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
 
     if (editing && onSubmitUpdate) {
       onSubmitUpdate({
+        symbol: symbol.trim(),
         name: name.trim(),
         quantity: parseFloat(quantity),
         cost_price: parseFloat(costPrice),
@@ -123,16 +124,15 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
             </div>
           )}
 
-          {!editing && (
-            <div>
-              <label className="block text-xs text-t-muted mb-1">代码</label>
-              <input
-                value={symbol}
-                onChange={e => setSymbol(e.target.value)}
-                placeholder={selectedMarket?.hint}
-                required
-                className={inputClass}
-              />
+          <div>
+            <label className="block text-xs text-t-muted mb-1">代码</label>
+            <input
+              value={symbol}
+              onChange={e => setSymbol(e.target.value)}
+              placeholder={selectedMarket?.hint}
+              required
+              className={inputClass}
+            />
               {isFutures && (
                 <div className="mt-2 rounded-lg bg-bg-hover p-2.5 text-xs text-t-faint animate-fadeIn">
                   <p className="font-medium text-t-muted mb-1">中金所品种 (乘数 / 保证金):</p>
@@ -147,8 +147,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
                   <p className="mt-1.5">主力合约加 0 (如 IF0)，指定合约加年月 (如 IF2406)</p>
                 </div>
               )}
-            </div>
-          )}
+          </div>
 
           <div>
             <label className="block text-xs text-t-muted mb-1">名称</label>

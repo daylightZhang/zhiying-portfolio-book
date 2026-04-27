@@ -31,6 +31,7 @@ export interface HoldingCreate {
 }
 
 export interface HoldingUpdate {
+  symbol?: string
   name?: string
   quantity?: number
   cost_price?: number
