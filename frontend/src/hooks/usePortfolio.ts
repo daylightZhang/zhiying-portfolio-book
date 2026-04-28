@@ -35,6 +35,14 @@ export function useRefreshPrices() {
   })
 }
 
+export function useExchangeRates() {
+  return useQuery({
+    queryKey: ['exchange-rates'],
+    queryFn: portfolioApi.getExchangeRates,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 export function useRefreshExchangeRates() {
   const qc = useQueryClient()
   return useMutation({

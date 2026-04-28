@@ -9,10 +9,12 @@ import GainLossText from '../components/common/GainLossText'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmptyState from '../components/common/EmptyState'
+import CurrencySelector from '../components/dashboard/CurrencySelector'
 import { MARKETS, CURRENCY_SYMBOLS } from '../utils/constants'
-import { formatNumber } from '../utils/format'
+import { formatNumber, formatCurrency } from '../utils/format'
 import { useToast } from '../hooks/useToast'
 import { useSettings } from '../hooks/useSettings'
+import { useBaseCurrency, useExchangeRates } from '../hooks/usePortfolio'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
 const FILTERS = [{ value: '', label: '全部' }, ...MARKETS.map(m => ({ value: m.value, label: m.label }))]
@@ -44,7 +46,21 @@ export default function HoldingsPage() {
   const { showToast } = useToast()
   const { settings } = useSettings()
   const pageSize = settings.holdingsPageSize
+  const [baseCurrency, setBaseCurrency] = useBaseCurrency()
+  const { data: rates } = useExchangeRates()
   const { data: holdings, isLoading } = useHoldings(marketFilter || undefined)
+
+  // Build fx rate lookup: from→to→rate
+  const fxRate = (from: string, to: string): number => {
+    if (from === to) return 1
+    const direct = rates?.find(r => r.from_currency === from && r.to_currency === to)
+    if (direct) return direct.rate
+    // Bridge via USD
+    const toUsd = rates?.find(r => r.from_currency === from && r.to_currency === 'USD')
+    const fromUsd = rates?.find(r => r.from_currency === 'USD' && r.to_currency === to)
+    if (toUsd && fromUsd) return toUsd.rate * fromUsd.rate
+    return 1
+  }
 
   // Reset page when pageSize changes
   useEffect(() => { setPage(0) }, [pageSize])
@@ -83,13 +99,16 @@ export default function HoldingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-t-primary">持仓管理</h2>
-        <button
-          onClick={() => { setEditing(null); setFormOpen(true) }}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-all duration-200"
-        >
-          <Plus size={16} />
-          建仓
-        </button>
+        <div className="flex items-center gap-3">
+          <CurrencySelector value={baseCurrency} onChange={setBaseCurrency} />
+          <button
+            onClick={() => { setEditing(null); setFormOpen(true) }}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-all duration-200"
+          >
+            <Plus size={16} />
+            建仓
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -186,7 +205,7 @@ export default function HoldingsPage() {
                       {h.current_price !== null ? `${currSymbol}${formatNumber(h.current_price)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {h.current_price !== null ? (() => { const gl = holdingGainLoss(h); return <GainLossText value={gl.value} percent={gl.pct} size="sm" showIcon={false} /> })() : '—'}
+                      {h.current_price !== null ? (() => { const gl = holdingGainLoss(h); const fx = fxRate(h.currency, baseCurrency); return <GainLossText value={gl.value * fx} percent={gl.pct} size="sm" showIcon={false} /> })() : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-t-muted">
                       {totalMV > 0 ? (holdingMarketValue(h) / totalMV * 100).toFixed(1) : '0.0'}%

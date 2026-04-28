@@ -95,17 +95,30 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
     acct = db.get(Account, account_id)
     if acct and acct.type == "broker":
         sync_linked_holdings(db, holding.id)
-        # Adjust cash in linked portfolio accounts proportionally
+        # Adjust cash in linked portfolio accounts proportionally + create records
         if data.type.value in ("BUY", "SELL"):
             linked = list(db.scalars(
                 select(Holding).where(Holding.linked_broker_holding_id == holding.id)
             ).all())
+            now = now_beijing()
             for lh in linked:
                 linked_amount = trade_amount * (lh.holding_ratio or 1.0)
                 if data.type.value == "BUY":
                     cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
+                    db.add(Transaction(
+                        account_id=lh.account_id, holding_id=None, type="WITHDRAW",
+                        quantity=1, price=linked_amount, total_amount=linked_amount,
+                        currency=holding.currency, transacted_at=now,
+                        notes=f"关联买入 {holding.symbol} ({data.quantity}股×{data.price}×{lh.holding_ratio:.2%})",
+                    ))
                 else:
                     cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
+                    db.add(Transaction(
+                        account_id=lh.account_id, holding_id=None, type="DEPOSIT",
+                        quantity=1, price=linked_amount, total_amount=linked_amount,
+                        currency=holding.currency, transacted_at=now,
+                        notes=f"关联卖出 {holding.symbol} ({data.quantity}股×{data.price}×{lh.holding_ratio:.2%})",
+                    ))
 
     db.commit()
     db.refresh(tx)
@@ -185,7 +198,7 @@ def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transa
             acct = db.get(Account, account_id)
             if acct and acct.type == "broker":
                 sync_linked_holdings(db, holding.id)
-                # Adjust cash in linked portfolio accounts (reverse of original)
+                # Adjust cash in linked portfolio accounts (reverse of original) + create records
                 if tx.type in ("BUY", "SELL"):
                     multiplier = holding.contract_multiplier or 1.0
                     trade_amount = tx.quantity * tx.price * multiplier
@@ -195,11 +208,21 @@ def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transa
                     for lh in linked:
                         linked_amount = trade_amount * (lh.holding_ratio or 1.0)
                         if tx.type == "BUY":
-                            # Rollback BUY = return cash to linked accounts
                             cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
+                            db.add(Transaction(
+                                account_id=lh.account_id, holding_id=None, type="DEPOSIT",
+                                quantity=1, price=linked_amount, total_amount=linked_amount,
+                                currency=holding.currency, transacted_at=now,
+                                notes=f"回滚关联买入 {holding.symbol} #{tx.id}",
+                            ))
                         else:
-                            # Rollback SELL = deduct cash from linked accounts
                             cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
+                            db.add(Transaction(
+                                account_id=lh.account_id, holding_id=None, type="WITHDRAW",
+                                quantity=1, price=linked_amount, total_amount=linked_amount,
+                                currency=holding.currency, transacted_at=now,
+                                notes=f"回滚关联卖出 {holding.symbol} #{tx.id}",
+                            ))
     db.commit()
     db.refresh(reverse)
     return reverse

@@ -18,6 +18,17 @@ export async function refreshExchangeRates(): Promise<unknown[]> {
   return data
 }
 
+export interface ExchangeRate {
+  from_currency: string
+  to_currency: string
+  rate: number
+}
+
+export async function getExchangeRates(): Promise<ExchangeRate[]> {
+  const { data } = await client.get('/portfolio/exchange-rates')
+  return data
+}
+
 export interface CashBalance {
   currency: string
   balance: number

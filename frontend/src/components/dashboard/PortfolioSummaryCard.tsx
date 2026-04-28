@@ -32,6 +32,10 @@ export default function PortfolioSummaryCard({ totalValue, totalCost, totalCash,
           <p className="text-sm text-t-secondary">{formatCurrency(totalCash, currency)}</p>
         </div>
         <div>
+          <p className="text-xs text-t-faint">总仓位</p>
+          <p className="text-sm text-t-secondary">{totalValue > 0 ? ((totalValue - totalCash) / totalValue * 100).toFixed(1) : '0.0'}%</p>
+        </div>
+        <div>
           <p className="text-xs text-t-faint">总成本</p>
           <p className="text-sm text-t-secondary">{formatCurrency(totalCost, currency)}</p>
         </div>
