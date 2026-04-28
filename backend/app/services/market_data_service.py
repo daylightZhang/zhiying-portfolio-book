@@ -15,6 +15,14 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
     if not holdings:
         return {"updated": 0, "failed": 0, "details": []}
 
+    # Deduplicate: only fetch once per symbol
+    seen_symbols: set[str] = set()
+    unique_holdings: list[Holding] = []
+    for h in holdings:
+        if h.symbol not in seen_symbols:
+            seen_symbols.add(h.symbol)
+            unique_holdings.append(h)
+
     now = now_beijing()
     results = {"updated": 0, "failed": 0, "details": []}
 
@@ -87,19 +95,19 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
             return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
         return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
-    # All holdings in parallel, one thread each
-    with ThreadPoolExecutor(max_workers=len(holdings)) as executor:
-        future_map = {executor.submit(_resolve_one, h): h for h in holdings}
+    # Fetch prices in parallel, one thread per unique symbol
+    price_updates: dict[str, tuple[float, datetime]] = {}
+
+    with ThreadPoolExecutor(max_workers=max(1, len(unique_holdings))) as executor:
+        future_map = {executor.submit(_resolve_one, h): h for h in unique_holdings}
         for fut in as_completed(future_map):
             h = future_map[fut]
             try:
                 res = fut.result(timeout=10)
                 if res["status"] == "ok":
-                    # Only update DB for realtime sources (not cache/delayed)
                     if res.get("source") != "cache":
                         if res.get("realtime") or h.market in ("A_SHARE", "CN_FUTURES"):
-                            h.current_price = res["price"]
-                            h.price_updated_at = now
+                            price_updates[h.symbol] = (res["price"], now)
                     results["updated"] += 1
                 else:
                     results["failed"] += 1
@@ -107,6 +115,16 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
             except Exception as e:
                 results["failed"] += 1
                 results["details"].append({"symbol": h.symbol, "status": "failed", "error": str(e)})
+
+    # Apply price updates to ALL holdings with matching symbol (across all accounts)
+    if price_updates:
+        from sqlalchemy import update
+        for sym, (price, updated_at) in price_updates.items():
+            db.execute(
+                update(Holding)
+                .where(Holding.symbol == sym)
+                .values(current_price=price, price_updated_at=updated_at)
+            )
 
     db.commit()
     return results
@@ -326,7 +344,8 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
 
 
 def refresh_single_price(db: Session, symbol: str, account_id: int = 1) -> dict:
-    holdings = list(db.scalars(select(Holding).where(Holding.symbol == symbol, Holding.account_id == account_id, Holding.quantity > 0)).all())
+    # Find all holdings with this symbol across all accounts to share price
+    holdings = list(db.scalars(select(Holding).where(Holding.symbol == symbol, Holding.quantity > 0)).all())
     if not holdings:
         return {"status": "not_found"}
 

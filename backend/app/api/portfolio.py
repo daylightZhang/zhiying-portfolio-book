@@ -103,13 +103,15 @@ def get_summary(
         txs_by_holding.setdefault(tx.holding_id, []).append(tx)
 
     # For each holding (current + any with sell history), replay to get realized P&L
-    holding_map = {h.id: h for h in holdings}
+    # Include zero-quantity holdings for currency/multiplier lookup
+    all_holdings = list(db.scalars(select(Holding).where(Holding.account_id == account_id)).all())
+    holding_map = {h.id: h for h in all_holdings}
     for hid, txs in txs_by_holding.items():
         h = holding_map.get(hid)
         multiplier = (getattr(h, 'contract_multiplier', 1.0) or 1.0) if h else 1.0
         ratio = (getattr(h, 'holding_ratio', 1.0) or 1.0) if h else 1.0
         is_futures = h.market == "CN_FUTURES" if h else False
-        currency = h.currency if h else (txs[0].currency or "CNY")
+        currency = h.currency if h else next((t.currency for t in txs if t.currency), "CNY")
 
         # Replay: track running avg cost
         # Seed with holding's cost_price as fallback (in case initial BUY record is missing)
@@ -138,6 +140,48 @@ def get_summary(
 
         fx_rate = currency_service.get_rate(db, currency, base_currency)
         total_realized_pnl += realized_native * fx_rate
+
+    # Linked holdings: compute realized P&L from broker's transactions × link ratio
+    for h in all_holdings:
+        if not h.linked_broker_holding_id:
+            continue
+        broker_h = db.get(Holding, h.linked_broker_holding_id)
+        if not broker_h:
+            continue
+        broker_txs = list(db.scalars(
+            select(Transaction)
+            .where(Transaction.holding_id == broker_h.id)
+            .where(Transaction.type.in_(["BUY", "SELL", "ADJUST"]))
+            .order_by(Transaction.transacted_at.asc())
+        ).all())
+        if not broker_txs:
+            continue
+        b_multiplier = broker_h.contract_multiplier or 1.0
+        b_is_futures = broker_h.market == "CN_FUTURES"
+        link_ratio = h.holding_ratio or 1.0
+        b_running_qty = 0.0
+        b_running_cost = broker_h.cost_price
+        b_seeded = False
+        b_realized = 0.0
+        for tx in broker_txs:
+            if tx.type == "BUY":
+                if not b_seeded:
+                    b_running_cost = 0.0
+                    b_running_qty = 0.0
+                    b_seeded = True
+                if b_running_qty + tx.quantity > 0:
+                    b_running_cost = (b_running_qty * b_running_cost + tx.quantity * tx.price) / (b_running_qty + tx.quantity)
+                b_running_qty += tx.quantity
+            elif tx.type == "SELL":
+                b_realized += (tx.price - b_running_cost) * tx.quantity * b_multiplier
+                b_running_qty = max(0, b_running_qty - tx.quantity)
+            elif tx.type == "ADJUST":
+                b_seeded = True
+                b_running_qty = tx.quantity
+                b_running_cost = tx.price
+        # Apply link ratio and convert currency
+        fx_rate = currency_service.get_rate(db, broker_h.currency, base_currency)
+        total_realized_pnl += b_realized * link_ratio * fx_rate
 
     # Cash balances
     cash_rows = cash_service.get_all_balances(db, account_id)

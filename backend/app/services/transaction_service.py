@@ -95,6 +95,17 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
     acct = db.get(Account, account_id)
     if acct and acct.type == "broker":
         sync_linked_holdings(db, holding.id)
+        # Adjust cash in linked portfolio accounts proportionally
+        if data.type.value in ("BUY", "SELL"):
+            linked = list(db.scalars(
+                select(Holding).where(Holding.linked_broker_holding_id == holding.id)
+            ).all())
+            for lh in linked:
+                linked_amount = trade_amount * (lh.holding_ratio or 1.0)
+                if data.type.value == "BUY":
+                    cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
+                else:
+                    cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
 
     db.commit()
     db.refresh(tx)
@@ -174,6 +185,21 @@ def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transa
             acct = db.get(Account, account_id)
             if acct and acct.type == "broker":
                 sync_linked_holdings(db, holding.id)
+                # Adjust cash in linked portfolio accounts (reverse of original)
+                if tx.type in ("BUY", "SELL"):
+                    multiplier = holding.contract_multiplier or 1.0
+                    trade_amount = tx.quantity * tx.price * multiplier
+                    linked = list(db.scalars(
+                        select(Holding).where(Holding.linked_broker_holding_id == holding.id)
+                    ).all())
+                    for lh in linked:
+                        linked_amount = trade_amount * (lh.holding_ratio or 1.0)
+                        if tx.type == "BUY":
+                            # Rollback BUY = return cash to linked accounts
+                            cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
+                        else:
+                            # Rollback SELL = deduct cash from linked accounts
+                            cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
     db.commit()
     db.refresh(reverse)
     return reverse
