@@ -16,6 +16,9 @@ def _migrate_db():
 
         # Ensure accounts table exists with default account
         if "accounts" in tables:
+            acct_cols = [c["name"] for c in inspector.get_columns("accounts")]
+            if "type" not in acct_cols:
+                conn.execute(text("ALTER TABLE accounts ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'portfolio'"))
             has_default = conn.execute(text("SELECT id FROM accounts WHERE id = 1")).fetchone()
             if not has_default:
                 conn.execute(text("INSERT INTO accounts (id, name) VALUES (1, '默认账户')"))
@@ -82,6 +85,12 @@ def _migrate_db():
                 conn.execute(text("DROP TABLE holdings"))
                 conn.execute(text("ALTER TABLE holdings_new RENAME TO holdings"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_holdings_account_id ON holdings(account_id)"))
+
+            # Re-read columns after possible rebuild
+            columns = [c["name"] for c in inspector.get_columns("holdings")]
+            if "linked_broker_holding_id" not in columns:
+                conn.execute(text("ALTER TABLE holdings ADD COLUMN linked_broker_holding_id INTEGER"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_holdings_linked_broker ON holdings(linked_broker_holding_id)"))
 
         if "transactions" in tables:
             tx_cols = {c["name"]: c for c in inspector.get_columns("transactions")}

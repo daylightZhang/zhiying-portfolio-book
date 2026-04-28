@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 class AccountCreate(BaseModel):
     name: str
+    type: str = "portfolio"
 
 
 class AccountUpdate(BaseModel):
@@ -13,6 +14,7 @@ class AccountUpdate(BaseModel):
 class AccountResponse(BaseModel):
     id: int
     name: str
+    type: str
     created_at: datetime
     updated_at: datetime
 

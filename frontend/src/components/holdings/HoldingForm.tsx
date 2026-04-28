@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, Link, Unlink } from 'lucide-react'
 import { MARKETS, CN_FUTURES_PRODUCTS } from '../../utils/constants'
 import CustomSelect from '../common/CustomSelect'
+import { useBrokerPositions } from '../../hooks/useHoldings'
+import { useAccounts, useCurrentAccount } from '../../hooks/useAccount'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../../types/holding'
 
 const MARKET_OPTIONS = MARKETS.map(m => ({ value: m.value, label: m.label, hint: m.hint }))
@@ -29,9 +31,27 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
   const [contractMultiplier, setContractMultiplier] = useState('1')
   const [marginRate, setMarginRate] = useState('0')
   const [notes, setNotes] = useState('')
+  const [linkEnabled, setLinkEnabled] = useState(false)
+  const [selectedBrokerId, setSelectedBrokerId] = useState<number | null>(null)
+
+  const { accountId } = useCurrentAccount()
+  const { data: accounts } = useAccounts()
+  const { data: brokerPositions } = useBrokerPositions()
+  const currentAccount = accounts?.find(a => a.id === accountId)
+  const isPortfolioAccount = currentAccount?.type === 'portfolio'
+  const isLinkedEditing = editing?.linked_broker_holding_id != null
 
   const selectedMarket = MARKETS.find(m => m.value === market)
   const isFutures = market === 'CN_FUTURES'
+
+  // Group broker positions by account
+  const brokerGroups = brokerPositions?.reduce((acc, bp) => {
+    if (!acc[bp.account_name]) acc[bp.account_name] = []
+    acc[bp.account_name].push(bp)
+    return acc
+  }, {} as Record<string, typeof brokerPositions>) || {}
+
+  const selectedBrokerPos = brokerPositions?.find(bp => bp.id === selectedBrokerId)
 
   useEffect(() => {
     if (editing) {
@@ -44,6 +64,8 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
       setContractMultiplier(String(editing.contract_multiplier ?? 1))
       setMarginRate(String((editing.margin_rate ?? 0) * 100))
       setNotes(editing.notes || '')
+      setLinkEnabled(editing.linked_broker_holding_id != null)
+      setSelectedBrokerId(editing.linked_broker_holding_id)
     } else {
       setMarket('A_SHARE')
       setSymbol('')
@@ -54,8 +76,19 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
       setContractMultiplier('1')
       setMarginRate('0')
       setNotes('')
+      setLinkEnabled(false)
+      setSelectedBrokerId(null)
     }
   }, [editing, open])
+
+  // Auto-fill from broker position
+  useEffect(() => {
+    if (linkEnabled && selectedBrokerPos) {
+      setSymbol(selectedBrokerPos.symbol)
+      setName(selectedBrokerPos.name)
+      setMarket(selectedBrokerPos.market)
+    }
+  }, [selectedBrokerId, linkEnabled])
 
   // Auto-fill multiplier and margin rate when futures symbol changes
   useEffect(() => {
@@ -70,6 +103,13 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
 
   if (!open) return null
 
+  const handleUnlink = () => {
+    if (editing && onSubmitUpdate) {
+      onSubmitUpdate({ unlink: true })
+      onClose()
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const ratio = Math.min(1, Math.max(0, parseFloat(holdingRatio) / 100))
@@ -77,29 +117,57 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
     const mRate = isFutures ? Math.max(0, parseFloat(marginRate) / 100) : 0
 
     if (editing && onSubmitUpdate) {
-      onSubmitUpdate({
-        symbol: symbol.trim(),
-        name: name.trim(),
-        quantity: parseFloat(quantity),
-        cost_price: parseFloat(costPrice),
-        holding_ratio: ratio,
-        contract_multiplier: multiplier,
-        margin_rate: mRate,
-        notes: notes.trim() || undefined,
-      })
+      if (isLinkedEditing) {
+        // Linked: only allow changing name, ratio, notes
+        onSubmitUpdate({
+          name: name.trim(),
+          holding_ratio: ratio,
+          notes: notes.trim() || undefined,
+        })
+      } else if (linkEnabled && selectedBrokerId) {
+        // Establishing new link
+        onSubmitUpdate({
+          linked_broker_holding_id: selectedBrokerId,
+          name: name.trim(),
+          holding_ratio: ratio,
+          notes: notes.trim() || undefined,
+        })
+      } else {
+        onSubmitUpdate({
+          symbol: symbol.trim(),
+          name: name.trim(),
+          quantity: parseFloat(quantity),
+          cost_price: parseFloat(costPrice),
+          holding_ratio: ratio,
+          contract_multiplier: multiplier,
+          margin_rate: mRate,
+          notes: notes.trim() || undefined,
+        })
+      }
     } else if (onSubmitCreate) {
-      onSubmitCreate({
-        symbol: symbol.trim(),
-        name: name.trim(),
-        market,
-        quantity: parseFloat(quantity),
-        cost_price: parseFloat(costPrice),
-        holding_ratio: ratio,
-        contract_multiplier: multiplier,
-        margin_rate: mRate,
-        currency: selectedMarket?.currency,
-        notes: notes.trim() || undefined,
-      })
+      if (linkEnabled && selectedBrokerId) {
+        onSubmitCreate({
+          symbol: selectedBrokerPos?.symbol || symbol.trim(),
+          name: name.trim(),
+          market: selectedBrokerPos?.market || market,
+          holding_ratio: ratio,
+          linked_broker_holding_id: selectedBrokerId,
+          notes: notes.trim() || undefined,
+        })
+      } else {
+        onSubmitCreate({
+          symbol: symbol.trim(),
+          name: name.trim(),
+          market,
+          quantity: parseFloat(quantity),
+          cost_price: parseFloat(costPrice),
+          holding_ratio: ratio,
+          contract_multiplier: multiplier,
+          margin_rate: mRate,
+          currency: selectedMarket?.currency,
+          notes: notes.trim() || undefined,
+        })
+      }
     }
     onClose()
   }
@@ -117,13 +185,83 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!editing && (
+          {/* Broker linking section — only for portfolio accounts */}
+          {isPortfolioAccount && !isLinkedEditing && (
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-t-muted mb-2">
+                <input
+                  type="checkbox"
+                  checked={linkEnabled}
+                  onChange={e => { setLinkEnabled(e.target.checked); if (!e.target.checked) setSelectedBrokerId(null) }}
+                  className="rounded"
+                />
+                <Link size={13} />
+                关联券商持仓
+              </label>
+              {linkEnabled && (
+                <div className="space-y-2 rounded-lg border border-border-subtle bg-bg-hover p-3 animate-fadeIn">
+                  <select
+                    value={selectedBrokerId ?? ''}
+                    onChange={e => setSelectedBrokerId(e.target.value ? Number(e.target.value) : null)}
+                    className={inputClass}
+                  >
+                    <option value="">选择券商持仓</option>
+                    {Object.entries(brokerGroups).map(([acctName, positions]) => (
+                      <optgroup key={acctName} label={acctName}>
+                        {positions.map(bp => (
+                          <option key={bp.id} value={bp.id}>{bp.symbol} - {bp.name} ({bp.quantity}股)</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <div>
+                    <label className="block text-xs text-t-muted mb-1">占比 %</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="100"
+                      value={holdingRatio}
+                      onChange={e => setHoldingRatio(e.target.value)}
+                      required
+                      className={inputClass}
+                      placeholder="100"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Linked holding info when editing */}
+          {isLinkedEditing && editing && (
+            <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <div className="text-xs">
+                <span className="text-amber-600 font-medium">
+                  <Link size={12} className="inline mr-1" />
+                  关联中
+                </span>
+                <span className="text-t-muted ml-2">{editing.broker_account_name} / {editing.broker_holding_symbol}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleUnlink}
+                className="flex items-center gap-1 text-xs text-t-muted hover:text-loss transition-colors"
+              >
+                <Unlink size={12} />
+                取消关联
+              </button>
+            </div>
+          )}
+
+          {!editing && !linkEnabled && (
             <div>
               <label className="block text-xs text-t-muted mb-1">市场</label>
               <CustomSelect options={MARKET_OPTIONS} value={market} onChange={setMarket} placeholder="选择市场" />
             </div>
           )}
 
+          {!linkEnabled && (
           <div>
             <label className="block text-xs text-t-muted mb-1">代码</label>
             <input
@@ -131,6 +269,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
               onChange={e => setSymbol(e.target.value)}
               placeholder={selectedMarket?.hint}
               required
+              disabled={isLinkedEditing}
               className={inputClass}
             />
               {isFutures && (
@@ -148,6 +287,7 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
                 </div>
               )}
           </div>
+          )}
 
           <div>
             <label className="block text-xs text-t-muted mb-1">名称</label>
@@ -160,6 +300,9 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
             />
           </div>
 
+          {/* Quantity, cost, ratio — hidden when linking */}
+          {!linkEnabled && !isLinkedEditing && (
+          <>
           <div className={`grid gap-3 ${isFutures ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <div>
               <label className="block text-xs text-t-muted mb-1">数量</label>
@@ -243,6 +386,25 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
                   placeholder="100"
                 />
               </div>
+            </div>
+          )}
+          </>
+          )}
+
+          {/* Ratio field for linked holdings */}
+          {isLinkedEditing && (
+            <div>
+              <label className="block text-xs text-t-muted mb-1">占比 %</label>
+              <input
+                type="number"
+                step="any"
+                min="1"
+                max="100"
+                value={holdingRatio}
+                onChange={e => setHoldingRatio(e.target.value)}
+                required
+                className={inputClass}
+              />
             </div>
           )}
 

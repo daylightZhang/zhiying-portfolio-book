@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { HoldingSummary } from '../../types/portfolio'
 import MarketBadge from '../holdings/MarketBadge'
 import GainLossText from '../common/GainLossText'
 import { formatNumber, formatCurrency } from '../../utils/format'
-
-const PAGE_SIZE = 5
+import { useSettings } from '../../hooks/useSettings'
 
 interface Props {
   holdings: HoldingSummary[]
@@ -14,15 +13,20 @@ interface Props {
 
 export default function HoldingsTable({ holdings, currency }: Props) {
   const [page, setPage] = useState(0)
+  const { settings } = useSettings()
+  const pageSize = settings.holdingsPageSize
+
+  // Reset page when pageSize changes
+  useEffect(() => { setPage(0) }, [pageSize])
 
   // Sort by market_value_base descending
   const sorted = [...holdings].sort((a, b) => b.market_value_base - a.market_value_base)
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
-  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const paged = sorted.slice(page * pageSize, (page + 1) * pageSize)
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * PAGE_SIZE}px` }}>
+      <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * pageSize}px` }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

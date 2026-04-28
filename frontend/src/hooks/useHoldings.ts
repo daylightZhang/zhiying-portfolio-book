@@ -44,3 +44,10 @@ export function useDeleteHolding() {
     },
   })
 }
+
+export function useBrokerPositions() {
+  return useQuery({
+    queryKey: ['broker-positions'],
+    queryFn: holdingsApi.getBrokerPositions,
+  })
+}

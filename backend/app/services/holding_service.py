@@ -1,9 +1,10 @@
 from datetime import datetime
 from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.models.holding import Holding
+from app.models.account import Account
 from app.models.transaction import Transaction
 from app.schemas.holding import HoldingCreate, HoldingUpdate
 from app.utils.ticker import MARKET_CURRENCY_MAP, Market, Currency
@@ -30,6 +31,36 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
         symbol = data.symbol.strip()
     else:
         symbol = data.symbol.strip().upper()
+
+    # Linked holding: sync fields from broker, skip BUY transaction
+    if data.linked_broker_holding_id:
+        broker_h = db.get(Holding, data.linked_broker_holding_id)
+        if not broker_h:
+            raise ValueError("Broker holding not found")
+        broker_acct = db.get(Account, broker_h.account_id)
+        if not broker_acct or broker_acct.type != "broker":
+            raise ValueError("Target holding is not in a broker account")
+
+        holding = Holding(
+            account_id=account_id,
+            symbol=broker_h.symbol,
+            name=data.name.strip() or broker_h.name,
+            market=broker_h.market,
+            quantity=broker_h.quantity,
+            cost_price=broker_h.cost_price,
+            holding_ratio=data.holding_ratio,
+            contract_multiplier=broker_h.contract_multiplier,
+            margin_rate=broker_h.margin_rate,
+            currency=broker_h.currency,
+            current_price=broker_h.current_price,
+            price_updated_at=broker_h.price_updated_at,
+            linked_broker_holding_id=broker_h.id,
+            notes=data.notes,
+        )
+        db.add(holding)
+        db.commit()
+        db.refresh(holding)
+        return holding
 
     holding = Holding(
         account_id=account_id,
@@ -67,6 +98,51 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
     if not holding:
         return None
 
+    # Unlink from broker
+    if data.unlink and holding.linked_broker_holding_id is not None:
+        holding.linked_broker_holding_id = None
+        holding.updated_at = now_beijing()
+        db.commit()
+        db.refresh(holding)
+        return holding
+
+    # Establish new link to broker
+    if data.linked_broker_holding_id is not None:
+        broker_h = db.get(Holding, data.linked_broker_holding_id)
+        if broker_h:
+            broker_acct = db.get(Account, broker_h.account_id)
+            if broker_acct and broker_acct.type == "broker":
+                holding.linked_broker_holding_id = broker_h.id
+                holding.symbol = broker_h.symbol
+                holding.name = data.name.strip() if data.name else broker_h.name
+                holding.market = broker_h.market
+                holding.currency = broker_h.currency
+                holding.quantity = broker_h.quantity
+                holding.cost_price = broker_h.cost_price
+                holding.current_price = broker_h.current_price
+                holding.contract_multiplier = broker_h.contract_multiplier
+                holding.margin_rate = broker_h.margin_rate
+                if data.holding_ratio is not None:
+                    holding.holding_ratio = data.holding_ratio
+                holding.updated_at = now_beijing()
+                db.commit()
+                db.refresh(holding)
+                return holding
+
+    # Linked holdings: only allow changing name, holding_ratio, notes
+    if holding.linked_broker_holding_id is not None:
+        if data.name is not None:
+            holding.name = data.name.strip()
+        if data.holding_ratio is not None:
+            holding.holding_ratio = data.holding_ratio
+        if data.notes is not None:
+            holding.notes = data.notes
+        holding.updated_at = now_beijing()
+        db.commit()
+        db.refresh(holding)
+        return holding
+
+    # Normal (unlinked) holding update
     if data.symbol is not None:
         holding.symbol = data.symbol.strip()
     if data.name is not None:
@@ -80,6 +156,7 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
     if data.margin_rate is not None:
         holding.margin_rate = data.margin_rate
 
+    qty_or_cost_changed = False
     if data.quantity is not None or data.cost_price is not None:
         new_qty = data.quantity if data.quantity is not None else holding.quantity
         new_cost = data.cost_price if data.cost_price is not None else holding.cost_price
@@ -98,8 +175,16 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
 
         holding.quantity = new_qty
         holding.cost_price = new_cost
+        qty_or_cost_changed = True
 
     holding.updated_at = now_beijing()
+
+    # If this is a broker holding, sync linked holdings
+    if qty_or_cost_changed:
+        acct = db.get(Account, holding.account_id)
+        if acct and acct.type == "broker":
+            sync_linked_holdings(db, holding.id)
+
     db.commit()
     db.refresh(holding)
     return holding
@@ -109,6 +194,28 @@ def delete_holding(db: Session, holding_id: int) -> bool:
     holding = db.get(Holding, holding_id)
     if not holding:
         return False
+    # Unlink any holdings referencing this one
+    db.execute(
+        update(Holding)
+        .where(Holding.linked_broker_holding_id == holding_id)
+        .values(linked_broker_holding_id=None)
+    )
     db.delete(holding)
     db.commit()
     return True
+
+
+def sync_linked_holdings(db: Session, broker_holding_id: int):
+    """Sync quantity and cost_price from broker holding to all linked holdings."""
+    broker = db.get(Holding, broker_holding_id)
+    if not broker:
+        return
+    linked = list(db.scalars(
+        select(Holding).where(Holding.linked_broker_holding_id == broker_holding_id)
+    ).all())
+    now = now_beijing()
+    for h in linked:
+        h.quantity = broker.quantity
+        h.cost_price = broker.cost_price
+        h.current_price = broker.current_price
+        h.updated_at = now

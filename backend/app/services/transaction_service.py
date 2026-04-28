@@ -53,6 +53,11 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
     if not holding:
         return None
 
+    # Linked holdings are read-only
+    if holding.linked_broker_holding_id is not None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="无法对关联持仓进行交易操作")
+
     multiplier = holding.contract_multiplier or 1.0
     trade_amount = data.quantity * data.price * multiplier
 
@@ -83,6 +88,14 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
         holding.cost_price = data.price
 
     holding.updated_at = now_beijing()
+
+    # Sync linked holdings if this is a broker account holding
+    from app.models.account import Account
+    from app.services.holding_service import sync_linked_holdings
+    acct = db.get(Account, account_id)
+    if acct and acct.type == "broker":
+        sync_linked_holdings(db, holding.id)
+
     db.commit()
     db.refresh(tx)
     return tx
@@ -155,6 +168,12 @@ def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transa
         holding = db.get(Holding, tx.holding_id)
         if holding:
             holding.updated_at = now
+            # Sync linked holdings if this is a broker account holding
+            from app.models.account import Account
+            from app.services.holding_service import sync_linked_holdings
+            acct = db.get(Account, account_id)
+            if acct and acct.type == "broker":
+                sync_linked_holdings(db, holding.id)
     db.commit()
     db.refresh(reverse)
     return reverse

@@ -25,10 +25,16 @@ export default function DashboardPage() {
   const countdownRef = useRef<ReturnType<typeof setInterval>>()
   const { showToast } = useToast()
 
+  const calcCountdown = useCallback(() => {
+    if (!summary?.last_refreshed) return REFRESH_INTERVAL
+    const lastMs = new Date(summary.last_refreshed).getTime()
+    const remaining = Math.ceil((lastMs + REFRESH_INTERVAL * 1000 - Date.now()) / 1000)
+    return Math.max(0, remaining)
+  }, [summary?.last_refreshed])
+
   const handleRefresh = useCallback(async () => {
     try {
       const [priceResult] = await Promise.all([refreshPrices.mutateAsync(), refreshRates.mutateAsync()])
-      setCountdown(REFRESH_INTERVAL)
       const res = priceResult as Record<string, unknown>
       const updated = (res?.updated as number) ?? 0
       const failed = (res?.failed as number) ?? 0
@@ -46,19 +52,21 @@ export default function DashboardPage() {
 
   const isRefreshing = refreshPrices.isPending || refreshRates.isPending
 
+  // Sync countdown from last_refreshed
+  useEffect(() => {
+    setCountdown(calcCountdown())
+  }, [calcCountdown])
+
   useEffect(() => {
     countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          refreshPrices.mutate()
-          refreshRates.mutate()
-          return REFRESH_INTERVAL
-        }
-        return prev - 1
-      })
+      const remaining = calcCountdown()
+      setCountdown(remaining)
+      if (remaining <= 0) {
+        handleRefresh()
+      }
     }, 1000)
     return () => clearInterval(countdownRef.current)
-  }, [])
+  }, [calcCountdown, handleRefresh])
 
   if (isLoading) return <LoadingSpinner />
 

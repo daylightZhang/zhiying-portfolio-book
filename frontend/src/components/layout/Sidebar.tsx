@@ -28,6 +28,7 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
   const [showDropdown, setShowDropdown] = useState(false)
   const [newName, setNewName] = useState('')
   const [showNewInput, setShowNewInput] = useState(false)
+  const [newType, setNewType] = useState<'portfolio' | 'broker'>('portfolio')
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const currentAccount = accounts?.find(a => a.id === accountId)
@@ -35,10 +36,11 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
 
   const handleCreate = () => {
     if (!newName.trim()) return
-    createAccount.mutate(newName.trim(), {
+    createAccount.mutate({ name: newName.trim(), type: newType }, {
       onSuccess: (account) => {
         setAccountId(account.id)
         setNewName('')
+        setNewType('portfolio')
         setShowNewInput(false)
         setShowDropdown(false)
       },
@@ -86,7 +88,10 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
             onClick={() => setShowDropdown(!showDropdown)}
             className="w-full flex items-center justify-between rounded-lg border border-border-subtle bg-bg-hover px-3 py-2 text-sm text-t-primary hover:border-accent/50 transition-colors"
           >
-            <span className="truncate">{currentAccount?.name || '选择账户'}</span>
+            <span className="truncate flex items-center gap-1.5">
+              {currentAccount?.type === 'broker' && <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span>}
+              {currentAccount?.name || '选择账户'}
+            </span>
             <ChevronDown size={14} className={`text-t-faint transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
 
@@ -101,7 +106,10 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
                       a.id === accountId ? 'bg-accent-bg text-accent' : 'text-t-secondary hover:bg-bg-hover'
                     }`}
                   >
-                    <span className="truncate">{a.name}</span>
+                    <span className="truncate flex items-center gap-1.5">
+                      {a.type === 'broker' && <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span>}
+                      {a.name}
+                    </span>
                     {accounts.length > 1 && (
                       <button
                         onClick={(e) => handleDeleteClick(a.id, e)}
@@ -115,18 +123,34 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
               </div>
               <div className="border-t border-border-subtle p-2">
                 {showNewInput ? (
-                  <div className="flex gap-1.5">
-                    <input
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                      placeholder="账户名称"
-                      autoFocus
-                      className="flex-1 rounded-md border border-border bg-input-bg px-2 py-1 text-xs text-t-primary outline-none focus:border-accent"
-                    />
-                    <button onClick={handleCreate} className="rounded-md bg-accent px-2 py-1 text-xs text-white hover:opacity-90">
-                      确定
-                    </button>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setNewType('portfolio')}
+                        className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${newType === 'portfolio' ? 'bg-accent-bg text-accent' : 'text-t-muted hover:bg-bg-hover'}`}
+                      >
+                        投资账本
+                      </button>
+                      <button
+                        onClick={() => setNewType('broker')}
+                        className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${newType === 'broker' ? 'bg-amber-500/20 text-amber-600' : 'text-t-muted hover:bg-bg-hover'}`}
+                      >
+                        券商账户
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                        placeholder="账户名称"
+                        autoFocus
+                        className="flex-1 rounded-md border border-border bg-input-bg px-2 py-1 text-xs text-t-primary outline-none focus:border-accent"
+                      />
+                      <button onClick={handleCreate} className="rounded-md bg-accent px-2 py-1 text-xs text-white hover:opacity-90">
+                        确定
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button

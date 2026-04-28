@@ -1,5 +1,5 @@
 import client from './client'
-import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
+import type { Holding, HoldingCreate, HoldingUpdate, BrokerPosition } from '../types/holding'
 
 export async function getHoldings(market?: string, accountId: number = 1): Promise<Holding[]> {
   const params: Record<string, unknown> = { account_id: accountId }
@@ -25,4 +25,9 @@ export async function updateHolding(id: number, payload: HoldingUpdate): Promise
 
 export async function deleteHolding(id: number): Promise<void> {
   await client.delete(`/holdings/${id}`)
+}
+
+export async function getBrokerPositions(): Promise<BrokerPosition[]> {
+  const { data } = await client.get('/holdings/broker-positions')
+  return data
 }

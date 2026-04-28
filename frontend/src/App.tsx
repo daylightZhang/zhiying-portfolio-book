@@ -8,14 +8,17 @@ import NewsPage from './pages/NewsPage'
 import NewsAlert from './components/common/NewsAlert'
 import { AccountContext, useAccountState } from './hooks/useAccount'
 import { ToastContext, useToastState } from './hooks/useToast'
+import { SettingsContext, useSettingsState } from './hooks/useSettings'
 
 function App() {
   const accountState = useAccountState()
   const toastState = useToastState()
+  const settingsState = useSettingsState()
 
   return (
     <AccountContext.Provider value={accountState}>
       <ToastContext.Provider value={toastState}>
+        <SettingsContext.Provider value={settingsState}>
         <AppLayout>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
@@ -36,6 +39,7 @@ function App() {
             <span className="text-sm text-t-primary">{toastState.toast.message}</span>
           </div>
         )}
+        </SettingsContext.Provider>
       </ToastContext.Provider>
     </AccountContext.Provider>
   )

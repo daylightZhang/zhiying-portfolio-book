@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import { useAccounts, useCurrentAccount, useUpdateAccount } from '../../hooks/useAccount'
 import { THEMES, type ThemeId } from '../../hooks/useTheme'
+import { useSettings } from '../../hooks/useSettings'
+
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 30]
 
 interface Props {
   open: boolean
@@ -14,6 +17,7 @@ export default function SettingsDialog({ open, onClose, theme, onThemeChange }: 
   const { accountId } = useCurrentAccount()
   const { data: accounts } = useAccounts()
   const updateAccount = useUpdateAccount()
+  const { settings, update: updateSettings } = useSettings()
   const [accountName, setAccountName] = useState('')
   const [saved, setSaved] = useState(false)
 
@@ -66,6 +70,26 @@ export default function SettingsDialog({ open, onClose, theme, onThemeChange }: 
               >
                 {saved ? <Check size={16} /> : '保存'}
               </button>
+            </div>
+          </div>
+
+          {/* Page Size */}
+          <div>
+            <label className="block text-xs font-medium text-t-muted mb-2">每页持仓数</label>
+            <div className="flex gap-2">
+              {PAGE_SIZE_OPTIONS.map(n => (
+                <button
+                  key={n}
+                  onClick={() => updateSettings({ holdingsPageSize: n })}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all border ${
+                    settings.holdingsPageSize === n
+                      ? 'border-accent bg-accent-bg text-accent'
+                      : 'border-border-subtle text-t-muted hover:bg-bg-hover hover:text-t-secondary'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
 

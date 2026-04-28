@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Search, ChevronLeft, ChevronRight, Link } from 'lucide-react'
 import { useHoldings, useCreateHolding, useUpdateHolding, useDeleteHolding } from '../hooks/useHoldings'
 import { useCreateTransaction } from '../hooks/useTransactions'
 import HoldingForm from '../components/holdings/HoldingForm'
@@ -12,10 +12,10 @@ import EmptyState from '../components/common/EmptyState'
 import { MARKETS, CURRENCY_SYMBOLS } from '../utils/constants'
 import { formatNumber } from '../utils/format'
 import { useToast } from '../hooks/useToast'
+import { useSettings } from '../hooks/useSettings'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
 const FILTERS = [{ value: '', label: '全部' }, ...MARKETS.map(m => ({ value: m.value, label: m.label }))]
-const PAGE_SIZE = 10
 
 function holdingMarketValue(h: Holding): number {
   return (h.current_price || 0) * h.quantity * (h.contract_multiplier || 1) * (h.holding_ratio || 1)
@@ -42,7 +42,12 @@ export default function HoldingsPage() {
   const [trading, setTrading] = useState<{ holding: Holding; mode: 'BUY' | 'SELL' } | null>(null)
 
   const { showToast } = useToast()
+  const { settings } = useSettings()
+  const pageSize = settings.holdingsPageSize
   const { data: holdings, isLoading } = useHoldings(marketFilter || undefined)
+
+  // Reset page when pageSize changes
+  useEffect(() => { setPage(0) }, [pageSize])
   const createMutation = useCreateHolding()
   const updateMutation = useUpdateHolding()
   const deleteMutation = useDeleteHolding()
@@ -121,8 +126,8 @@ export default function HoldingsPage() {
         const filtered = holdings?.filter(h =>
           !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
         )?.sort((a, b) => holdingMarketValue(b) - holdingMarketValue(a))
-        const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / PAGE_SIZE))
-        const paged = filtered?.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+        const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / pageSize))
+        const paged = filtered?.slice(page * pageSize, (page + 1) * pageSize)
         return isLoading ? (
         <LoadingSpinner />
       ) : !filtered || filtered.length === 0 ? (
@@ -142,7 +147,7 @@ export default function HoldingsPage() {
         />
       ) : (
         <>
-        <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * PAGE_SIZE}px` }}>
+        <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden" style={{ minHeight: `${41 + 49 * pageSize}px` }}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-t-faint uppercase tracking-wider">
@@ -159,11 +164,17 @@ export default function HoldingsPage() {
             <tbody>
               {paged?.map(h => {
                 const currSymbol = CURRENCY_SYMBOLS[h.currency] || ''
+                const isLinked = h.linked_broker_holding_id != null
                 return (
                   <tr key={h.id} className="border-b border-border-subtle hover:bg-bg-hover/50 transition-colors duration-150">
                     <td className="px-4 py-3">
                       <span className="font-medium text-t-primary">{h.name}</span>
                       <span className="ml-2 text-xs text-t-faint">{h.symbol}</span>
+                      {isLinked && (
+                        <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600" title={`关联: ${h.broker_account_name}`}>
+                          <Link size={9} />关联
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3"><MarketBadge market={h.market} /></td>
                     <td className="px-4 py-3 text-right text-t-secondary">{formatNumber(h.quantity, 0)}</td>
@@ -177,20 +188,24 @@ export default function HoldingsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => setTrading({ holding: h, mode: 'BUY' })}
-                          className="rounded-lg px-2 py-1 text-xs font-medium text-accent bg-accent-bg hover:opacity-80 transition-all duration-200"
-                          title="买入"
-                        >
-                          <TrendingUp size={13} className="inline mr-0.5" />买入
-                        </button>
-                        <button
-                          onClick={() => setTrading({ holding: h, mode: 'SELL' })}
-                          className="rounded-lg px-2 py-1 text-xs font-medium text-orange-500 bg-orange-500/10 hover:opacity-80 transition-all duration-200"
-                          title="卖出"
-                        >
-                          <TrendingDown size={13} className="inline mr-0.5" />卖出
-                        </button>
+                        {!isLinked && (
+                          <>
+                            <button
+                              onClick={() => setTrading({ holding: h, mode: 'BUY' })}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-accent bg-accent-bg hover:opacity-80 transition-all duration-200"
+                              title="买入"
+                            >
+                              <TrendingUp size={13} className="inline mr-0.5" />买入
+                            </button>
+                            <button
+                              onClick={() => setTrading({ holding: h, mode: 'SELL' })}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-orange-500 bg-orange-500/10 hover:opacity-80 transition-all duration-200"
+                              title="卖出"
+                            >
+                              <TrendingDown size={13} className="inline mr-0.5" />卖出
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => setDeleting(h)}
                           className="rounded-lg px-2 py-1 text-xs font-medium text-red-500 bg-red-500/10 hover:opacity-80 transition-all duration-200"

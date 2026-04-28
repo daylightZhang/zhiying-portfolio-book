@@ -20,7 +20,7 @@ def list_accounts(db: Session = Depends(get_db)):
 
 @router.post("", response_model=AccountResponse, status_code=201)
 def create_account(data: AccountCreate, db: Session = Depends(get_db)):
-    account = Account(name=data.name.strip())
+    account = Account(name=data.name.strip(), type=data.type)
     db.add(account)
     db.commit()
     db.refresh(account)
@@ -44,6 +44,15 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     account = db.get(Account, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    # Unlink any linked holdings pointing to this account's holdings
+    from sqlalchemy import select, update
+    holding_ids = [h.id for h in db.scalars(select(Holding.id).where(Holding.account_id == account_id)).all()]
+    if holding_ids:
+        db.execute(
+            update(Holding)
+            .where(Holding.linked_broker_holding_id.in_(holding_ids))
+            .values(linked_broker_holding_id=None)
+        )
     # Cascade delete all related data
     db.execute(Transaction.__table__.delete().where(Transaction.account_id == account_id))
     db.execute(Holding.__table__.delete().where(Holding.account_id == account_id))

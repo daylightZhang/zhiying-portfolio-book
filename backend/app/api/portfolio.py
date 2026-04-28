@@ -112,22 +112,27 @@ def get_summary(
         currency = h.currency if h else (txs[0].currency or "CNY")
 
         # Replay: track running avg cost
+        # Seed with holding's cost_price as fallback (in case initial BUY record is missing)
         running_qty = 0.0
-        running_cost = 0.0  # avg cost per unit
+        running_cost = h.cost_price if h else 0.0
+        seeded = False  # tracks whether we've seen a BUY/ADJUST
         realized_native = 0.0
 
         for tx in txs:
             if tx.type == "BUY":
+                if not seeded:
+                    # First BUY establishes the baseline, reset seed
+                    running_cost = 0.0
+                    running_qty = 0.0
+                    seeded = True
                 if running_qty + tx.quantity > 0:
                     running_cost = (running_qty * running_cost + tx.quantity * tx.price) / (running_qty + tx.quantity)
                 running_qty += tx.quantity
             elif tx.type == "SELL":
-                if is_futures:
-                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
-                else:
-                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
+                realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
                 running_qty = max(0, running_qty - tx.quantity)
             elif tx.type == "ADJUST":
+                seeded = True
                 running_qty = tx.quantity
                 running_cost = tx.price
 

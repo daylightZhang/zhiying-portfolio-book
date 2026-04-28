@@ -37,7 +37,7 @@ export function useAccounts() {
 export function useCreateAccount() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (name: string) => accountsApi.createAccount(name),
+    mutationFn: ({ name, type }: { name: string; type?: string }) => accountsApi.createAccount(name, type),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
   })
 }
