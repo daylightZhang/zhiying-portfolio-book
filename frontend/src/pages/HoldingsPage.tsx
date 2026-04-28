@@ -126,6 +126,7 @@ export default function HoldingsPage() {
         const filtered = holdings?.filter(h =>
           !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
         )?.sort((a, b) => holdingMarketValue(b) - holdingMarketValue(a))
+        const totalMV = filtered?.reduce((s, h) => s + holdingMarketValue(h), 0) || 0
         const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / pageSize))
         const paged = filtered?.slice(page * pageSize, (page + 1) * pageSize)
         return isLoading ? (
@@ -158,6 +159,7 @@ export default function HoldingsPage() {
                 <th className="px-4 py-3 text-right">成本价</th>
                 <th className="px-4 py-3 text-right">现价</th>
                 <th className="px-4 py-3 text-right">盈亏</th>
+                <th className="px-4 py-3 text-right">仓位</th>
                 <th className="px-4 py-3 text-right">操作</th>
               </tr>
             </thead>
@@ -178,13 +180,16 @@ export default function HoldingsPage() {
                     </td>
                     <td className="px-4 py-3"><MarketBadge market={h.market} /></td>
                     <td className="px-4 py-3 text-right text-t-secondary">{formatNumber(h.quantity, 0)}</td>
-                    <td className="px-4 py-3 text-right text-t-muted">{((h.holding_ratio ?? 1) * 100).toFixed(0)}%</td>
+                    <td className="px-4 py-3 text-right text-t-muted">{((h.holding_ratio ?? 1) * 100).toFixed(2)}%</td>
                     <td className="px-4 py-3 text-right text-t-secondary">{currSymbol}{formatNumber(h.cost_price)}</td>
                     <td className="px-4 py-3 text-right text-t-primary font-medium">
                       {h.current_price !== null ? `${currSymbol}${formatNumber(h.current_price)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {h.current_price !== null ? (() => { const gl = holdingGainLoss(h); return <GainLossText value={gl.value} percent={gl.pct} size="sm" showIcon={false} /> })() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-t-muted">
+                      {totalMV > 0 ? (holdingMarketValue(h) / totalMV * 100).toFixed(1) : '0.0'}%
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
