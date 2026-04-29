@@ -65,6 +65,14 @@ def get_summary(
             if last_refreshed is None or h.price_updated_at > last_refreshed:
                 last_refreshed = h.price_updated_at
 
+        broker_account_name = None
+        if getattr(h, 'linked_broker_holding_id', None):
+            broker_h = db.get(Holding, h.linked_broker_holding_id)
+            if broker_h:
+                from app.models.account import Account as Acct
+                broker_acct = db.get(Acct, broker_h.account_id)
+                broker_account_name = broker_acct.name if broker_acct else None
+
         holding_summaries.append(HoldingSummary(
             id=h.id,
             symbol=h.symbol,
@@ -84,6 +92,8 @@ def get_summary(
             gain_loss_pct=gain_loss_pct,
             weight_pct=0,
             price_updated_at=h.price_updated_at,
+            linked_broker_holding_id=getattr(h, 'linked_broker_holding_id', None),
+            broker_account_name=broker_account_name,
         ))
 
     # Realized P&L: replay all transactions to compute accurately

@@ -17,6 +17,8 @@ export interface HoldingSummary {
   gain_loss_pct: number
   weight_pct: number
   price_updated_at: string | null
+  linked_broker_holding_id: number | null
+  broker_account_name: string | null
 }
 
 export interface MarketBreakdown {

@@ -1,5 +1,14 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-04-29 v1.9.6 - 持仓管理数据统一用后端计算
+
+### 修改
+- **持仓管理盈亏/仓位由后端计算**: 移除前端 `holdingMarketValue`/`holdingGainLoss` 客户端计算，改用 portfolio summary 后端返回的 `gain_loss`、`gain_loss_pct`、`weight_pct`、`market_value_base`
+- **期货仓位计算修正**: 后端统一使用保证金模式计算期货市值，前端不再需要重复实现
+- **HoldingSummary 增加关联字段**: 后端 portfolio summary 返回 `linked_broker_holding_id` 和 `broker_account_name`
+
+---
+
 ## 2026-04-29 v1.9.5 - 总览自动刷新数据 + 防重复刷新
 
 ### 修改

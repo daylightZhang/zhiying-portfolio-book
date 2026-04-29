@@ -23,6 +23,8 @@ class HoldingSummary(BaseModel):
     gain_loss_pct: float
     weight_pct: float
     price_updated_at: datetime | None
+    linked_broker_holding_id: int | None = None
+    broker_account_name: str | None = None
 
 
 class MarketBreakdown(BaseModel):

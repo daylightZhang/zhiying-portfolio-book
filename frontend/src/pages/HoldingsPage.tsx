@@ -11,28 +11,13 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmptyState from '../components/common/EmptyState'
 import CurrencySelector from '../components/dashboard/CurrencySelector'
 import { MARKETS, CURRENCY_SYMBOLS } from '../utils/constants'
-import { formatNumber, formatCurrency } from '../utils/format'
+import { formatNumber } from '../utils/format'
 import { useToast } from '../hooks/useToast'
 import { useSettings } from '../hooks/useSettings'
-import { useBaseCurrency, useExchangeRates } from '../hooks/usePortfolio'
+import { useBaseCurrency, usePortfolioSummary } from '../hooks/usePortfolio'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../types/holding'
 
 const FILTERS = [{ value: '', label: '全部' }, ...MARKETS.map(m => ({ value: m.value, label: m.label }))]
-
-function holdingMarketValue(h: Holding): number {
-  return (h.current_price || 0) * h.quantity * (h.contract_multiplier || 1) * (h.holding_ratio || 1)
-}
-
-function holdingGainLoss(h: Holding): { value: number; pct: number } {
-  const price = h.current_price || 0
-  const mult = h.contract_multiplier || 1
-  const ratio = h.holding_ratio || 1
-  const mv = price * h.quantity * mult * ratio
-  const cost = h.cost_price * h.quantity * mult * ratio
-  const gl = mv - cost
-  const pct = cost !== 0 ? (gl / cost) * 100 : 0
-  return { value: gl, pct }
-}
 
 export default function HoldingsPage() {
   const [marketFilter, setMarketFilter] = useState('')
@@ -47,20 +32,11 @@ export default function HoldingsPage() {
   const { settings } = useSettings()
   const pageSize = settings.holdingsPageSize
   const [baseCurrency, setBaseCurrency] = useBaseCurrency()
-  const { data: rates } = useExchangeRates()
+  const { data: summary } = usePortfolioSummary(baseCurrency)
   const { data: holdings, isLoading } = useHoldings(marketFilter || undefined)
 
-  // Build fx rate lookup: from→to→rate
-  const fxRate = (from: string, to: string): number => {
-    if (from === to) return 1
-    const direct = rates?.find(r => r.from_currency === from && r.to_currency === to)
-    if (direct) return direct.rate
-    // Bridge via USD
-    const toUsd = rates?.find(r => r.from_currency === from && r.to_currency === 'USD')
-    const fromUsd = rates?.find(r => r.from_currency === 'USD' && r.to_currency === to)
-    if (toUsd && fromUsd) return toUsd.rate * fromUsd.rate
-    return 1
-  }
+  // Lookup map: holding id → summary data (gain_loss, weight_pct, market_value_base)
+  const summaryMap = new Map(summary?.holdings.map(h => [h.id, h]) || [])
 
   // Reset page when pageSize changes
   useEffect(() => { setPage(0) }, [pageSize])
@@ -144,8 +120,7 @@ export default function HoldingsPage() {
         const kw = search.trim().toLowerCase()
         const filtered = holdings?.filter(h =>
           !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
-        )?.sort((a, b) => holdingMarketValue(b) - holdingMarketValue(a))
-        const totalMV = holdings?.reduce((s, h) => s + holdingMarketValue(h), 0) || 0
+        )?.sort((a, b) => (summaryMap.get(b.id)?.market_value_base ?? 0) - (summaryMap.get(a.id)?.market_value_base ?? 0))
         const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / pageSize))
         const paged = filtered?.slice(page * pageSize, (page + 1) * pageSize)
         return isLoading ? (
@@ -205,10 +180,10 @@ export default function HoldingsPage() {
                       {h.current_price !== null ? `${currSymbol}${formatNumber(h.current_price)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {h.current_price !== null ? (() => { const gl = holdingGainLoss(h); const fx = fxRate(h.currency, baseCurrency); return <GainLossText value={gl.value * fx} percent={gl.pct} size="sm" showIcon={false} /> })() : '—'}
+                      {(() => { const s = summaryMap.get(h.id); return s ? <GainLossText value={s.gain_loss} percent={s.gain_loss_pct} size="sm" showIcon={false} /> : '—' })()}
                     </td>
                     <td className="px-4 py-3 text-right text-t-muted">
-                      {totalMV > 0 ? (holdingMarketValue(h) / totalMV * 100).toFixed(1) : '0.0'}%
+                      {summaryMap.get(h.id)?.weight_pct.toFixed(1) ?? '0.0'}%
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
