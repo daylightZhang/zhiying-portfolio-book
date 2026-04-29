@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Briefcase, History, Newspaper, Plus, Trash2, ChevronDown, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import ConfirmDialog from '../common/ConfirmDialog'
@@ -30,6 +30,19 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
   const [showNewInput, setShowNewInput] = useState(false)
   const [newType, setNewType] = useState<'portfolio' | 'broker'>('portfolio')
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showDropdown) return
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showDropdown])
 
   const currentAccount = accounts?.find(a => a.id === accountId)
   const deletingAccount = accounts?.find(a => a.id === deletingId)
@@ -83,13 +96,13 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
 
       {/* Account Selector */}
       {!collapsed && (
-        <div className="px-3 mb-2 relative">
+        <div className="px-3 mb-2 relative" ref={dropdownRef}>
           <button
             onClick={() => setShowDropdown(!showDropdown)}
             className="w-full flex items-center justify-between rounded-lg border border-border-subtle bg-bg-hover px-3 py-2 text-sm text-t-primary hover:border-accent/50 transition-colors"
           >
             <span className="truncate flex items-center gap-1.5">
-              {currentAccount?.type === 'broker' && <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span>}
+              {currentAccount?.type === 'broker' ? <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span> : <span className="shrink-0 rounded bg-accent-bg px-1 text-[10px] font-medium text-accent">账</span>}
               {currentAccount?.name || '选择账户'}
             </span>
             <ChevronDown size={14} className={`text-t-faint transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
@@ -107,7 +120,7 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
                     }`}
                   >
                     <span className="truncate flex items-center gap-1.5">
-                      {a.type === 'broker' && <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span>}
+                      {a.type === 'broker' ? <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-medium text-amber-600">券</span> : <span className="shrink-0 rounded bg-accent-bg px-1 text-[10px] font-medium text-accent">账</span>}
                       {a.name}
                     </span>
                     {accounts.length > 1 && (

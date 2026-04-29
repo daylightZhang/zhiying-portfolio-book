@@ -52,8 +52,6 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
             contract_multiplier=broker_h.contract_multiplier,
             margin_rate=broker_h.margin_rate,
             currency=broker_h.currency,
-            current_price=broker_h.current_price,
-            price_updated_at=broker_h.price_updated_at,
             linked_broker_holding_id=broker_h.id,
             notes=data.notes,
         )
@@ -128,7 +126,6 @@ def update_holding(db: Session, holding_id: int, data: HoldingUpdate) -> Holding
                 holding.currency = broker_h.currency
                 holding.quantity = broker_h.quantity
                 holding.cost_price = broker_h.cost_price
-                holding.current_price = broker_h.current_price
                 holding.contract_multiplier = broker_h.contract_multiplier
                 holding.margin_rate = broker_h.margin_rate
                 if data.holding_ratio is not None:
@@ -226,5 +223,4 @@ def sync_linked_holdings(db: Session, broker_holding_id: int):
     for h in linked:
         h.quantity = broker.quantity
         h.cost_price = broker.cost_price
-        h.current_price = broker.current_price
         h.updated_at = now

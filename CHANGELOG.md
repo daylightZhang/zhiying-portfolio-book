@@ -1,5 +1,23 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-04-29 v1.10.0 - 行情缓存独立表 + UI 优化
+
+### 重构
+- **行情缓存独立表 `market_quotes`**: 新建 `market_quotes` 表 (symbol PK, price, updated_at)
+  - 行情刷新写入 `market_quotes`，不再更新 holdings 表的 current_price
+  - portfolio summary 和 holdings API 从 `market_quotes` 读取价格
+  - 所有账户共享同一份行情数据，一个 symbol 一条记录
+  - `holding_service` 不再同步 current_price 到关联持仓
+
+### 新增
+- **投资账本类型标签**: 侧边栏投资账本显示蓝色"账"标签（券商账户显示橙色"券"）
+- **下拉列表点击外部收起**: 账户选择器下拉列表点击外部区域自动关闭
+
+### 数据库
+- 新增 `market_quotes` 表，首次迁移自动从 holdings 已有价格填充
+
+---
+
 ## 2026-04-29 v1.9.6 - 持仓管理数据统一用后端计算
 
 ### 修改

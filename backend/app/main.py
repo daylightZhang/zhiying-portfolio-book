@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 from app.api import holdings, transactions, market_data, portfolio, cash, accounts, news
+from app.models import market_quote  # noqa: F401 — ensure table is created
 
 
 def _migrate_db():
@@ -153,6 +154,17 @@ def _migrate_db():
                 conn.execute(text("DROP TABLE cash_balances"))
                 conn.execute(text("ALTER TABLE cash_balances_new RENAME TO cash_balances"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cash_balances_account_id ON cash_balances(account_id)"))
+
+        # Populate market_quotes from holdings if empty (first migration)
+        mq_count = conn.execute(text("SELECT COUNT(*) FROM market_quotes")).scalar()
+        if mq_count == 0 and "holdings" in tables:
+            conn.execute(text("""
+                INSERT OR IGNORE INTO market_quotes (symbol, price, updated_at)
+                SELECT symbol, current_price, price_updated_at
+                FROM holdings
+                WHERE current_price IS NOT NULL AND price_updated_at IS NOT NULL
+                GROUP BY symbol
+            """))
 
         conn.commit()
 

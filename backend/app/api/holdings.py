@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.holding import Holding
 from app.models.account import Account
+from app.models.market_quote import MarketQuote
 from app.schemas.holding import HoldingCreate, HoldingUpdate, HoldingResponse
 from app.services import holding_service
 
@@ -12,8 +13,13 @@ router = APIRouter(prefix="/holdings", tags=["holdings"])
 
 
 def _enrich_response(db: Session, holding: Holding) -> HoldingResponse:
-    """Build HoldingResponse with broker info if linked."""
+    """Build HoldingResponse with broker info and market quote price."""
     resp = HoldingResponse.model_validate(holding)
+    # Fill price from market_quotes
+    quote = db.get(MarketQuote, holding.symbol)
+    if quote:
+        resp.current_price = quote.price
+        resp.price_updated_at = quote.updated_at
     if holding.linked_broker_holding_id:
         broker_h = db.get(Holding, holding.linked_broker_holding_id)
         if broker_h:

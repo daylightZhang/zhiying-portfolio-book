@@ -5,7 +5,27 @@ from sqlalchemy import select
 import yfinance as yf
 
 from app.models.holding import Holding
+from app.models.market_quote import MarketQuote
 from app.utils.ticker import AKSHARE_MARKETS
+
+
+def _get_cached_price(db: Session, symbol: str) -> tuple[float | None, datetime | None]:
+    """Get cached price from market_quotes table."""
+    q = db.get(MarketQuote, symbol)
+    if q:
+        return q.price, q.updated_at
+    return None, None
+
+
+def _save_quotes(db: Session, updates: dict[str, tuple[float, datetime]]):
+    """Batch upsert prices into market_quotes table."""
+    for sym, (price, updated_at) in updates.items():
+        existing = db.get(MarketQuote, sym)
+        if existing:
+            existing.price = price
+            existing.updated_at = updated_at
+        else:
+            db.add(MarketQuote(symbol=sym, price=price, updated_at=updated_at))
 
 
 def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
@@ -57,10 +77,11 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
 
         else:
             # DB cache: if updated within 1 minute, skip online fetch
-            if h.current_price is not None and h.price_updated_at is not None:
-                age = (now - h.price_updated_at).total_seconds()
+            cached_price, cached_at = _get_cached_price(db, symbol)
+            if cached_price is not None and cached_at is not None:
+                age = (now - cached_at).total_seconds()
                 if age < 60:
-                    return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
+                    return {"symbol": symbol, "price": cached_price, "status": "ok", "source": "cache"}
 
             # International: google-finance (realtime) → yfinance (realtime) → finance-query (delayed) → akshare-us
             try:
@@ -90,9 +111,10 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 except Exception:
                     pass
 
-        # All online sources failed — keep DB cached price
-        if h.current_price is not None:
-            return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
+        # All online sources failed — use cached price from market_quotes
+        cached_price, _ = _get_cached_price(db, symbol)
+        if cached_price is not None:
+            return {"symbol": symbol, "price": cached_price, "status": "ok", "source": "cache"}
         return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
     # Fetch prices in parallel, one thread per unique symbol
@@ -116,15 +138,9 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
                 results["failed"] += 1
                 results["details"].append({"symbol": h.symbol, "status": "failed", "error": str(e)})
 
-    # Apply price updates to ALL holdings with matching symbol (across all accounts)
+    # Write price updates to market_quotes table
     if price_updates:
-        from sqlalchemy import update
-        for sym, (price, updated_at) in price_updates.items():
-            db.execute(
-                update(Holding)
-                .where(Holding.symbol == sym)
-                .values(current_price=price, price_updated_at=updated_at)
-            )
+        _save_quotes(db, price_updates)
 
     db.commit()
     return results
@@ -344,111 +360,80 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
 
 
 def refresh_single_price(db: Session, symbol: str, account_id: int = 1) -> dict:
-    # Find all holdings with this symbol across all accounts to share price
-    holdings = list(db.scalars(select(Holding).where(Holding.symbol == symbol, Holding.quantity > 0)).all())
-    if not holdings:
+    # Find one holding with this symbol to determine market
+    h = db.scalars(select(Holding).where(Holding.symbol == symbol, Holding.quantity > 0)).first()
+    if not h:
         return {"status": "not_found"}
 
-    h = holdings[0]
     now = now_beijing()
+    price = None
+    source = None
 
-    if h.market in {m.value for m in AKSHARE_MARKETS}:
-        return _refresh_single_akshare(db, holdings, now)
-    else:
-        return _refresh_single_yfinance(db, holdings, symbol, now)
+    if h.market == "A_SHARE":
+        import akshare as ak
+        try:
+            price = _akshare_stock_fallback(ak, symbol)
+            source = "akshare"
+        except Exception:
+            pass
+        if price is None:
+            try:
+                price = _finance_query_price(_a_share_to_yahoo(symbol))
+                source = "finance-query"
+            except Exception:
+                pass
 
-
-def _refresh_single_akshare(db: Session, holdings: list[Holding], now: datetime) -> dict:
-    import akshare as ak
-    h = holdings[0]
-    try:
-        if h.market == "A_SHARE":
-            price = _akshare_stock_fallback(ak, h.symbol)
-            for hh in holdings:
-                hh.current_price = price
-                hh.price_updated_at = now
-            db.commit()
-            return {"symbol": h.symbol, "price": price, "status": "ok"}
-        elif h.market == "CN_FUTURES":
-            df = ak.futures_zh_spot(symbol=h.symbol, market="FF", adjust="0")
+    elif h.market == "CN_FUTURES":
+        import akshare as ak
+        try:
+            df = ak.futures_zh_spot(symbol=symbol, market="FF", adjust="0")
             if df is not None and not df.empty:
                 price = float(df.iloc[-1]["current_price"])
-                for hh in holdings:
-                    hh.current_price = price
-                    hh.price_updated_at = now
-                db.commit()
-                return {"symbol": h.symbol, "price": price, "status": "ok"}
-    except Exception:
-        pass
-    # Fallback: finance-query for A-shares
-    if h.market == "A_SHARE":
-        try:
-            yf_symbol = _a_share_to_yahoo(h.symbol)
-            price = _finance_query_price(yf_symbol)
-            if price:
-                for hh in holdings:
-                    hh.current_price = price
-                    hh.price_updated_at = now
-                db.commit()
-                return {"symbol": h.symbol, "price": price, "status": "ok", "source": "finance-query"}
-        except Exception:
-            pass
-    return {"symbol": h.symbol, "status": "failed", "error": "all sources failed"}
-
-
-def _refresh_single_yfinance(db: Session, holdings: list[Holding], symbol: str, now: datetime) -> dict:
-    # google-finance (realtime) → yfinance (realtime) → finance-query (delayed) → akshare-us
-    try:
-        price = _google_finance_price(symbol)
-        if price:
-            for h in holdings:
-                h.current_price = price
-                h.price_updated_at = now
-            db.commit()
-            return {"symbol": symbol, "price": price, "status": "ok", "source": "google-finance"}
-    except Exception:
-        pass
-
-    try:
-        ticker = yf.Ticker(symbol)
-        price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
-        if price:
-            price = float(price)
-            for h in holdings:
-                h.current_price = price
-                h.price_updated_at = now
-            db.commit()
-            return {"symbol": symbol, "price": price, "status": "ok", "source": "yfinance"}
-    except Exception:
-        pass
-
-    try:
-        price = _finance_query_price(symbol)
-        if price:
-            for h in holdings:
-                h.current_price = price
-                h.price_updated_at = now
-            db.commit()
-            return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
-    except Exception:
-        pass
-
-    if holdings[0].market == "US":
-        try:
-            price = _akshare_us_stock_price(symbol)
-            if price:
-                for h in holdings:
-                    h.current_price = price
-                    h.price_updated_at = now
-                db.commit()
-                return {"symbol": symbol, "price": price, "status": "ok", "source": "akshare-us"}
+                source = "akshare"
         except Exception:
             pass
 
-    # All failed — keep DB cached price
-    h = holdings[0]
-    if h.current_price is not None:
-        return {"symbol": symbol, "price": h.current_price, "status": "ok", "source": "cache"}
+    else:
+        # International: google → yfinance → finance-query → akshare-us
+        try:
+            price = _google_finance_price(symbol)
+            if price:
+                source = "google-finance"
+        except Exception:
+            pass
+        if price is None:
+            try:
+                ticker = yf.Ticker(symbol)
+                p = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+                if p:
+                    price = float(p)
+                    source = "yfinance"
+            except Exception:
+                pass
+        if price is None:
+            try:
+                price = _finance_query_price(symbol)
+                if price:
+                    source = "finance-query"
+            except Exception:
+                pass
+        if price is None and h.market == "US":
+            try:
+                price = _akshare_us_stock_price(symbol)
+                if price:
+                    source = "akshare-us"
+            except Exception:
+                pass
+
+    if price is not None:
+        _save_quotes(db, {symbol: (price, now)})
+        db.commit()
+        return {"symbol": symbol, "price": price, "status": "ok", "source": source}
+
+    # All failed — use cached price
+    cached_price, _ = _get_cached_price(db, symbol)
+    if cached_price is not None:
+        return {"symbol": symbol, "price": cached_price, "status": "ok", "source": "cache"}
     return {"symbol": symbol, "status": "failed", "error": "all sources failed"}
 
 

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.holding import Holding
 from app.models.transaction import Transaction
+from app.models.market_quote import MarketQuote
 from app.schemas.portfolio import PortfolioSummary, HoldingSummary, MarketBreakdown, ExchangeRateResponse
 from app.services import holding_service, currency_service, cash_service
 from app.utils.ticker import MARKET_LABELS
@@ -20,6 +21,10 @@ def get_summary(
 ):
     holdings = holding_service.get_all_holdings(db, account_id=account_id)
 
+    # Load prices from market_quotes table
+    symbols = list({h.symbol for h in holdings})
+    quotes = {q.symbol: q for q in db.scalars(select(MarketQuote).where(MarketQuote.symbol.in_(symbols))).all()} if symbols else {}
+
     holding_summaries = []
     total_market_value = 0.0
     total_cost = 0.0
@@ -29,7 +34,8 @@ def get_summary(
     last_refreshed = None
 
     for h in holdings:
-        price = h.current_price or 0.0
+        quote = quotes.get(h.symbol)
+        price = quote.price if quote else 0.0
         ratio = getattr(h, 'holding_ratio', 1.0) or 1.0
         multiplier = getattr(h, 'contract_multiplier', 1.0) or 1.0
 
@@ -61,9 +67,9 @@ def get_summary(
         by_market[market_label] = by_market.get(market_label, 0) + market_value_base
         by_currency[h.currency] = by_currency.get(h.currency, 0) + market_value_base
 
-        if h.price_updated_at:
-            if last_refreshed is None or h.price_updated_at > last_refreshed:
-                last_refreshed = h.price_updated_at
+        if quote and quote.updated_at:
+            if last_refreshed is None or quote.updated_at > last_refreshed:
+                last_refreshed = quote.updated_at
 
         broker_account_name = None
         if getattr(h, 'linked_broker_holding_id', None):
@@ -83,7 +89,7 @@ def get_summary(
             holding_ratio=ratio,
             contract_multiplier=multiplier,
             margin_rate=getattr(h, 'margin_rate', 0.0) or 0.0,
-            current_price=h.current_price,
+            current_price=quote.price if quote else None,
             currency=h.currency,
             market_value=market_value_native,
             market_value_base=market_value_base,
@@ -91,7 +97,7 @@ def get_summary(
             gain_loss=gain_loss,
             gain_loss_pct=gain_loss_pct,
             weight_pct=0,
-            price_updated_at=h.price_updated_at,
+            price_updated_at=quote.updated_at if quote else None,
             linked_broker_holding_id=getattr(h, 'linked_broker_holding_id', None),
             broker_account_name=broker_account_name,
         ))
