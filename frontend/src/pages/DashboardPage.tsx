@@ -61,12 +61,12 @@ export default function DashboardPage() {
     countdownRef.current = setInterval(() => {
       const remaining = calcCountdown()
       setCountdown(remaining)
-      if (remaining <= 0) {
+      if (remaining <= 0 && !isRefreshing) {
         handleRefresh()
       }
     }, 1000)
     return () => clearInterval(countdownRef.current)
-  }, [calcCountdown, handleRefresh])
+  }, [calcCountdown, handleRefresh, isRefreshing])
 
   if (isLoading) return <LoadingSpinner />
 

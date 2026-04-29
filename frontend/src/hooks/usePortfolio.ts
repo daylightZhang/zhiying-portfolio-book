@@ -20,6 +20,7 @@ export function usePortfolioSummary(baseCurrency: string) {
   return useQuery({
     queryKey: ['portfolio', 'summary', accountId, baseCurrency],
     queryFn: () => portfolioApi.getPortfolioSummary(baseCurrency, accountId),
+    refetchInterval: 5000,
   })
 }
 
