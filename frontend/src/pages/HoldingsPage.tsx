@@ -145,7 +145,7 @@ export default function HoldingsPage() {
         const filtered = holdings?.filter(h =>
           !kw || h.name.toLowerCase().includes(kw) || h.symbol.toLowerCase().includes(kw)
         )?.sort((a, b) => holdingMarketValue(b) - holdingMarketValue(a))
-        const totalMV = filtered?.reduce((s, h) => s + holdingMarketValue(h), 0) || 0
+        const totalMV = holdings?.reduce((s, h) => s + holdingMarketValue(h), 0) || 0
         const totalPages = Math.max(1, Math.ceil((filtered?.length || 0) / pageSize))
         const paged = filtered?.slice(page * pageSize, (page + 1) * pageSize)
         return isLoading ? (

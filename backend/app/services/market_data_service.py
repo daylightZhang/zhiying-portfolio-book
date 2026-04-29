@@ -105,9 +105,9 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
             try:
                 res = fut.result(timeout=10)
                 if res["status"] == "ok":
+                    # Update DB for any non-cache source
                     if res.get("source") != "cache":
-                        if res.get("realtime") or h.market in ("A_SHARE", "CN_FUTURES"):
-                            price_updates[h.symbol] = (res["price"], now)
+                        price_updates[h.symbol] = (res["price"], now)
                     results["updated"] += 1
                 else:
                     results["failed"] += 1

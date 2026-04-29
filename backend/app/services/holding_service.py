@@ -78,6 +78,9 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
     db.add(holding)
     db.flush()
 
+    multiplier = data.contract_multiplier or 1.0
+    trade_amount = data.quantity * data.cost_price * multiplier
+
     tx = Transaction(
         account_id=account_id,
         holding_id=holding.id,
@@ -85,9 +88,15 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
         quantity=data.quantity,
         price=data.cost_price,
         total_amount=data.quantity * data.cost_price,
+        currency=currency.value,
         transacted_at=transacted_at,
     )
     db.add(tx)
+
+    # Deduct cash
+    from app.services import cash_service
+    cash_service.on_buy(db, currency.value, trade_amount, account_id)
+
     db.commit()
     db.refresh(holding)
     return holding
