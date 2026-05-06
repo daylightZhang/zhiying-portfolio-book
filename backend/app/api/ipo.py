@@ -1,7 +1,7 @@
 import re
 import json
 import time
-import pathlib
+import threading
 import logging
 from datetime import datetime, timedelta
 
@@ -9,18 +9,21 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
-from app.database import get_db
-from app.models.ipo_reminder import IPOReminder
+from app.database import get_db, SessionLocal
+from app.models.ipo_reminder import IPOReminder, IPOStock
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ipo", tags=["ipo"])
 
-# --- Cache config ---
-_IPO_CACHE_TTL = 3600  # 1 hour
-_IPO_CACHE_FILE = pathlib.Path(__file__).resolve().parents[3] / "data" / "ipo_cache.json"
+_UPDATE_INTERVAL = 3600  # 1 hour
+
+
+# ============================================================
+# Scraping logic (runs in background thread)
+# ============================================================
 
 
 def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
@@ -37,13 +40,11 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
 
         def handle_response(response):
             url = response.url
-            # Capture the initial HTML to extract __INITIAL_STATE__
             if "moomoo.com/hans/quote/us/ipo" in url and "text/html" in (response.headers.get("content-type", "")):
                 try:
                     ssr_html_captured.append(response.text())
                 except Exception:
                     pass
-            # Capture XHR responses for IPO list
             if "get-ipo-list" in url:
                 try:
                     body = response.json()
@@ -58,7 +59,6 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
 
         page.on("response", handle_response)
 
-        # Load page
         page.goto(
             "https://www.moomoo.com/hans/quote/us/ipo",
             wait_until="domcontentloaded",
@@ -87,20 +87,20 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
                             continue
                     break
 
-        # Remove popups/overlays that may intercept clicks
+        # Remove popups/overlays
         page.evaluate("""() => {
             document.querySelectorAll('[class*="gold-flow"], [class*="popup"]').forEach(el => el.remove());
         }""")
 
-        # Click "待上市" tab to trigger the XHR for applying list (page 0)
+        # Click "待上市" tab
         try:
             tab = page.locator("span:has-text('待上市')").first
             if tab.is_visible(timeout=3000):
                 tab.click(force=True)
                 page.wait_for_timeout(4000)
 
-                # Click through remaining pages (span.item inside .base-pagination)
-                for page_num in range(2, 20):  # pages are 1-indexed in UI
+                # Click through remaining pages
+                for page_num in range(2, 20):
                     btn = page.locator(f".base-pagination span.item:has-text('{page_num}')").first
                     try:
                         if btn.is_visible(timeout=1500):
@@ -119,7 +119,7 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
 
 
 def _fetch_ipo_data_simple() -> tuple[list[dict], list[dict]]:
-    """Fallback: fetch only listed IPOs from SSR (no Playwright needed)."""
+    """Fallback: fetch only listed IPOs from SSR."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -159,12 +159,10 @@ def _fetch_ipo_data_simple() -> tuple[list[dict], list[dict]]:
 
 
 def _format_finished_item(raw: dict) -> dict:
-    """Format a listed (finished) IPO item."""
     listing_ts = raw.get("listingDate", 0)
     listing_date = ""
     if listing_ts:
         listing_date = datetime.fromtimestamp(listing_ts).strftime("%Y-%m-%d")
-
     return {
         "symbol": raw.get("stockCode", ""),
         "name": raw.get("name", ""),
@@ -180,16 +178,12 @@ def _format_finished_item(raw: dict) -> dict:
 
 
 def _format_upcoming_item(raw: dict) -> dict:
-    """Format an upcoming (applying) IPO item."""
     listing_ts = raw.get("listingDate", 0)
     listing_date = ""
     if listing_ts and listing_ts > 0:
         listing_date = datetime.fromtimestamp(listing_ts).strftime("%Y-%m-%d")
-
-    # Upcoming items may use 'ipoDate' field as string (format: 2026/05/06)
     if not listing_date and raw.get("ipoDate"):
         listing_date = raw.get("ipoDate", "").replace("/", "-")
-
     return {
         "symbol": raw.get("stockCode", ""),
         "name": raw.get("name", ""),
@@ -204,39 +198,9 @@ def _format_upcoming_item(raw: dict) -> dict:
     }
 
 
-def _load_cache() -> dict | None:
-    """Load cached IPO data from disk."""
+def _update_ipo_db():
+    """Fetch IPO data and write to database. Called by background thread."""
     try:
-        if _IPO_CACHE_FILE.exists():
-            data = json.loads(_IPO_CACHE_FILE.read_text(encoding="utf-8"))
-            cache_time = data.get("_cache_time", 0)
-            if time.time() - cache_time < _IPO_CACHE_TTL:
-                return data
-    except Exception:
-        pass
-    return None
-
-
-def _save_cache(data: dict):
-    """Persist IPO data to disk."""
-    try:
-        _IPO_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        payload = {**data, "_cache_time": time.time()}
-        _IPO_CACHE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        logger.warning(f"Failed to save IPO cache: {e}")
-
-
-def _get_ipo_list() -> dict:
-    """Return cached or freshly fetched IPO data."""
-    # Check file cache first
-    cached = _load_cache()
-    if cached:
-        cached.pop("_cache_time", None)
-        return cached
-
-    try:
-        # Try Playwright first for full data (listed + upcoming)
         finished_raw, applying_raw = _fetch_ipo_data_playwright()
     except Exception as e:
         logger.warning(f"Playwright fetch failed: {e}, falling back to simple fetch")
@@ -244,35 +208,110 @@ def _get_ipo_list() -> dict:
             finished_raw, applying_raw = _fetch_ipo_data_simple()
         except Exception as e2:
             logger.warning(f"Simple fetch also failed: {e2}")
-            # Return stale cache if available (ignore TTL)
-            try:
-                if _IPO_CACHE_FILE.exists():
-                    data = json.loads(_IPO_CACHE_FILE.read_text(encoding="utf-8"))
-                    data.pop("_cache_time", None)
-                    return data
-            except Exception:
-                pass
-            return {"listed": [], "upcoming": [], "updated_at": None}
+            return
 
-    listed = [_format_finished_item(item) for item in finished_raw]
-    upcoming = [_format_upcoming_item(item) for item in applying_raw]
+    now = datetime.now()
+    items: list[dict] = []
+    items.extend(_format_finished_item(r) for r in finished_raw)
+    items.extend(_format_upcoming_item(r) for r in applying_raw)
 
-    result = {
-        "listed": listed,
-        "upcoming": upcoming,
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    _save_cache(result)
-    return result
+    if not items:
+        return
+
+    db = SessionLocal()
+    try:
+        # Clear old data and insert fresh
+        db.execute(delete(IPOStock))
+        for item in items:
+            db.add(IPOStock(
+                symbol=item["symbol"],
+                name=item["name"],
+                listing_date=item["listing_date"],
+                price=item["price"],
+                ipo_price=item["ipo_price"],
+                first_day_change=item["first_day_change"],
+                cumulative_change=item["cumulative_change"],
+                market_cap=item["market_cap"],
+                industry=item["industry"],
+                status=item["status"],
+                updated_at=now,
+            ))
+        db.commit()
+        logger.info(f"IPO DB updated: {len(items)} items at {now}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update IPO DB: {e}")
+    finally:
+        db.close()
 
 
-# --- API Endpoints ---
+# ============================================================
+# Background scheduler
+# ============================================================
+
+_scheduler_started = False
+
+
+def _scheduler_loop():
+    """Background loop: update IPO data every hour."""
+    while True:
+        try:
+            _update_ipo_db()
+        except Exception as e:
+            logger.error(f"IPO scheduler error: {e}")
+        time.sleep(_UPDATE_INTERVAL)
+
+
+def start_ipo_scheduler():
+    """Start the background update thread (called once at app startup)."""
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    _scheduler_started = True
+    t = threading.Thread(target=_scheduler_loop, daemon=True, name="ipo-scheduler")
+    t.start()
+    logger.info("IPO background scheduler started (interval: 1h)")
+
+
+# ============================================================
+# API Endpoints
+# ============================================================
 
 
 @router.get("/list")
-def get_ipo_list():
-    """Return listed + upcoming IPO data."""
-    return _get_ipo_list()
+def get_ipo_list(db: Session = Depends(get_db)):
+    """Read IPO data from database."""
+    rows = list(db.scalars(select(IPOStock).order_by(IPOStock.status, IPOStock.listing_date.desc())).all())
+
+    listed = []
+    upcoming = []
+    updated_at = None
+
+    for r in rows:
+        item = {
+            "symbol": r.symbol,
+            "name": r.name,
+            "listing_date": r.listing_date,
+            "price": r.price,
+            "ipo_price": r.ipo_price,
+            "first_day_change": r.first_day_change,
+            "cumulative_change": r.cumulative_change,
+            "market_cap": r.market_cap,
+            "industry": r.industry,
+            "status": r.status,
+        }
+        if r.status == "listed":
+            listed.append(item)
+        else:
+            upcoming.append(item)
+        if updated_at is None or r.updated_at > updated_at:
+            updated_at = r.updated_at
+
+    return {
+        "listed": listed,
+        "upcoming": upcoming,
+        "updated_at": updated_at.strftime("%Y-%m-%d %H:%M:%S") if updated_at else None,
+    }
 
 
 # --- Reminder endpoints ---
@@ -286,7 +325,6 @@ class ReminderCreate(BaseModel):
 
 @router.get("/reminders")
 def get_reminders(db: Session = Depends(get_db)):
-    """Get all configured reminders."""
     rows = list(db.scalars(select(IPOReminder).order_by(IPOReminder.listing_date.desc())).all())
     return [
         {"symbol": r.symbol, "name": r.name, "listing_date": r.listing_date}
@@ -296,7 +334,6 @@ def get_reminders(db: Session = Depends(get_db)):
 
 @router.post("/reminders", status_code=201)
 def add_reminder(data: ReminderCreate, db: Session = Depends(get_db)):
-    """Add a reminder for an IPO symbol."""
     existing = db.scalars(
         select(IPOReminder).where(IPOReminder.symbol == data.symbol)
     ).first()
@@ -314,7 +351,6 @@ def add_reminder(data: ReminderCreate, db: Session = Depends(get_db)):
 
 @router.delete("/reminders/{symbol}")
 def remove_reminder(symbol: str, db: Session = Depends(get_db)):
-    """Remove a reminder by symbol."""
     reminder = db.scalars(
         select(IPOReminder).where(IPOReminder.symbol == symbol)
     ).first()
@@ -327,7 +363,6 @@ def remove_reminder(symbol: str, db: Session = Depends(get_db)):
 
 @router.get("/reminders/active")
 def get_active_reminders(db: Session = Depends(get_db)):
-    """Get reminders that should trigger alerts (listing date within 7 days from now)."""
     today = datetime.now().date()
     rows = list(db.scalars(select(IPOReminder)).all())
     active = []
@@ -337,7 +372,7 @@ def get_active_reminders(db: Session = Depends(get_db)):
         except ValueError:
             continue
         days_until = (ld - today).days
-        if -1 <= days_until <= 7:  # from 7 days before to 1 day after listing
+        if -1 <= days_until <= 7:
             active.append({
                 "symbol": r.symbol,
                 "name": r.name,

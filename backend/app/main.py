@@ -173,6 +173,9 @@ def _migrate_db():
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrate_db()
+    # Start IPO background scheduler
+    from app.api.ipo import start_ipo_scheduler
+    start_ipo_scheduler()
     yield
 
 
