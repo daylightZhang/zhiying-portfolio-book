@@ -23,8 +23,86 @@ _ipo_cache_time: float = 0
 _IPO_CACHE_TTL = 3600  # 1 hour
 
 
-def _fetch_ipo_data() -> dict:
-    """Scrape moomoo IPO page and extract data from __INITIAL_STATE__."""
+def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
+    """Use Playwright to fetch both listed and upcoming IPO data from moomoo."""
+    from playwright.sync_api import sync_playwright
+
+    finished_raw: list[dict] = []
+    applying_raw: list[dict] = []
+    ssr_html_captured: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        def handle_response(response):
+            url = response.url
+            # Capture the initial HTML to extract __INITIAL_STATE__
+            if "moomoo.com/hans/quote/us/ipo" in url and "text/html" in (response.headers.get("content-type", "")):
+                try:
+                    ssr_html_captured.append(response.text())
+                except Exception:
+                    pass
+            # Capture XHR responses for IPO list
+            if "get-ipo-list" in url:
+                try:
+                    body = response.json()
+                    if body.get("code") == 0:
+                        items = body.get("data", {}).get("list", [])
+                        if "ipoType=2" in url:
+                            applying_raw.extend(items)
+                        else:
+                            finished_raw.extend(items)
+                except Exception:
+                    pass
+
+        page.on("response", handle_response)
+
+        # Load page
+        page.goto(
+            "https://www.moomoo.com/hans/quote/us/ipo",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+        page.wait_for_timeout(3000)
+
+        # Extract finished list from SSR HTML
+        if not finished_raw and ssr_html_captured:
+            for html in ssr_html_captured:
+                match = re.search(
+                    r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});\s*</script>',
+                    html,
+                    re.DOTALL,
+                )
+                if match:
+                    data_str = match.group(1)
+                    for end in range(len(data_str), max(0, len(data_str) - 2000), -1):
+                        try:
+                            state = json.loads(data_str[:end])
+                            ssr_finished = state.get("ipo_finished_list", {}).get("list", [])
+                            if ssr_finished:
+                                finished_raw.extend(ssr_finished)
+                            break
+                        except json.JSONDecodeError:
+                            continue
+                    break
+
+        # Click "待上市" tab to trigger the XHR for applying list
+        try:
+            tab = page.locator("span:has-text('待上市')").first
+            if tab.is_visible(timeout=3000):
+                tab.click()
+                page.wait_for_timeout(4000)
+        except Exception as e:
+            logger.warning(f"Could not click 待上市 tab: {e}")
+
+        browser.close()
+
+    return finished_raw, applying_raw
+
+
+def _fetch_ipo_data_simple() -> tuple[list[dict], list[dict]]:
+    """Fallback: fetch only listed IPOs from SSR (no Playwright needed)."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -39,7 +117,6 @@ def _fetch_ipo_data() -> dict:
     )
     resp.raise_for_status()
 
-    # Extract window.__INITIAL_STATE__ = {...};
     match = re.search(
         r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});\s*</script>',
         resp.text,
@@ -49,7 +126,6 @@ def _fetch_ipo_data() -> dict:
         raise ValueError("Could not find __INITIAL_STATE__ in page")
 
     data_str = match.group(1)
-    # JSON might have trailing data, try progressively shorter
     data = None
     for end in range(len(data_str), max(0, len(data_str) - 2000), -1):
         try:
@@ -60,11 +136,13 @@ def _fetch_ipo_data() -> dict:
     if data is None:
         raise ValueError("Failed to parse __INITIAL_STATE__ JSON")
 
-    return data
+    finished_raw = data.get("ipo_finished_list", {}).get("list", [])
+    applying_raw = data.get("ipo_applying_list", {}).get("list", [])
+    return finished_raw, applying_raw
 
 
-def _format_item(raw: dict, status: str) -> dict:
-    """Convert raw moomoo item to our standard format."""
+def _format_finished_item(raw: dict) -> dict:
+    """Format a listed (finished) IPO item."""
     listing_ts = raw.get("listingDate", 0)
     listing_date = ""
     if listing_ts:
@@ -80,7 +158,32 @@ def _format_item(raw: dict, status: str) -> dict:
         "cumulative_change": raw.get("ipoPriceChangeRatio", "--"),
         "market_cap": raw.get("marketVal", "--"),
         "industry": raw.get("industry", "--"),
-        "status": status,
+        "status": "listed",
+    }
+
+
+def _format_upcoming_item(raw: dict) -> dict:
+    """Format an upcoming (applying) IPO item."""
+    listing_ts = raw.get("listingDate", 0)
+    listing_date = ""
+    if listing_ts and listing_ts > 0:
+        listing_date = datetime.fromtimestamp(listing_ts).strftime("%Y-%m-%d")
+
+    # Upcoming items may use 'ipoDate' field as string (format: 2026/05/06)
+    if not listing_date and raw.get("ipoDate"):
+        listing_date = raw.get("ipoDate", "").replace("/", "-")
+
+    return {
+        "symbol": raw.get("stockCode", ""),
+        "name": raw.get("name", ""),
+        "listing_date": listing_date,
+        "price": "--",
+        "ipo_price": raw.get("ipoPrice", "--"),
+        "first_day_change": "--",
+        "cumulative_change": "--",
+        "market_cap": "--",
+        "industry": raw.get("industry", "--"),
+        "status": "upcoming",
     }
 
 
@@ -93,26 +196,29 @@ def _get_ipo_list() -> dict:
         return _ipo_cache
 
     try:
-        data = _fetch_ipo_data()
-        finished_raw = data.get("ipo_finished_list", {}).get("list", [])
-        applying_raw = data.get("ipo_applying_list", {}).get("list", [])
-
-        listed = [_format_item(item, "listed") for item in finished_raw]
-        upcoming = [_format_item(item, "upcoming") for item in applying_raw]
-
-        result = {
-            "listed": listed,
-            "upcoming": upcoming,
-            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        _ipo_cache = result
-        _ipo_cache_time = now
-        return result
+        # Try Playwright first for full data (listed + upcoming)
+        finished_raw, applying_raw = _fetch_ipo_data_playwright()
     except Exception as e:
-        logger.warning(f"Failed to fetch IPO data: {e}")
-        if _ipo_cache:
-            return _ipo_cache
-        return {"listed": [], "upcoming": [], "updated_at": None}
+        logger.warning(f"Playwright fetch failed: {e}, falling back to simple fetch")
+        try:
+            finished_raw, applying_raw = _fetch_ipo_data_simple()
+        except Exception as e2:
+            logger.warning(f"Simple fetch also failed: {e2}")
+            if _ipo_cache:
+                return _ipo_cache
+            return {"listed": [], "upcoming": [], "updated_at": None}
+
+    listed = [_format_finished_item(item) for item in finished_raw]
+    upcoming = [_format_upcoming_item(item) for item in applying_raw]
+
+    result = {
+        "listed": listed,
+        "upcoming": upcoming,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    _ipo_cache = result
+    _ipo_cache_time = now
+    return result
 
 
 # --- API Endpoints ---
