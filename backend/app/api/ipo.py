@@ -1,6 +1,7 @@
 import re
 import json
 import time
+import pathlib
 import logging
 from datetime import datetime, timedelta
 
@@ -17,10 +18,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ipo", tags=["ipo"])
 
-# --- Module-level cache ---
-_ipo_cache: dict | None = None
-_ipo_cache_time: float = 0
+# --- Cache config ---
 _IPO_CACHE_TTL = 3600  # 1 hour
+_IPO_CACHE_FILE = pathlib.Path(__file__).resolve().parents[3] / "data" / "ipo_cache.json"
 
 
 def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
@@ -204,13 +204,36 @@ def _format_upcoming_item(raw: dict) -> dict:
     }
 
 
+def _load_cache() -> dict | None:
+    """Load cached IPO data from disk."""
+    try:
+        if _IPO_CACHE_FILE.exists():
+            data = json.loads(_IPO_CACHE_FILE.read_text(encoding="utf-8"))
+            cache_time = data.get("_cache_time", 0)
+            if time.time() - cache_time < _IPO_CACHE_TTL:
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def _save_cache(data: dict):
+    """Persist IPO data to disk."""
+    try:
+        _IPO_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {**data, "_cache_time": time.time()}
+        _IPO_CACHE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to save IPO cache: {e}")
+
+
 def _get_ipo_list() -> dict:
     """Return cached or freshly fetched IPO data."""
-    global _ipo_cache, _ipo_cache_time
-
-    now = time.time()
-    if _ipo_cache and (now - _ipo_cache_time) < _IPO_CACHE_TTL:
-        return _ipo_cache
+    # Check file cache first
+    cached = _load_cache()
+    if cached:
+        cached.pop("_cache_time", None)
+        return cached
 
     try:
         # Try Playwright first for full data (listed + upcoming)
@@ -221,8 +244,14 @@ def _get_ipo_list() -> dict:
             finished_raw, applying_raw = _fetch_ipo_data_simple()
         except Exception as e2:
             logger.warning(f"Simple fetch also failed: {e2}")
-            if _ipo_cache:
-                return _ipo_cache
+            # Return stale cache if available (ignore TTL)
+            try:
+                if _IPO_CACHE_FILE.exists():
+                    data = json.loads(_IPO_CACHE_FILE.read_text(encoding="utf-8"))
+                    data.pop("_cache_time", None)
+                    return data
+            except Exception:
+                pass
             return {"listed": [], "upcoming": [], "updated_at": None}
 
     listed = [_format_finished_item(item) for item in finished_raw]
@@ -233,8 +262,7 @@ def _get_ipo_list() -> dict:
         "upcoming": upcoming,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    _ipo_cache = result
-    _ipo_cache_time = now
+    _save_cache(result)
     return result
 
 
