@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
-import { RefreshCw, Bell, BellRing, Search } from 'lucide-react'
+import { RefreshCw, Bell, BellRing, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useIPOList, useIPOReminders, useAddReminder, useRemoveReminder } from '../hooks/useIPO'
 import { useToast } from '../hooks/useToast'
+import { useSettings } from '../hooks/useSettings'
 import type { IPOItem } from '../api/ipo'
 
 export default function IPOPage() {
@@ -10,15 +11,17 @@ export default function IPOPage() {
   const addReminder = useAddReminder()
   const removeReminder = useRemoveReminder()
   const { showToast } = useToast()
+  const { settings } = useSettings()
   const [tab, setTab] = useState<'listed' | 'upcoming'>('listed')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
+  const pageSize = settings.holdingsPageSize
   const reminderSymbols = new Set(reminders?.map(r => r.symbol) || [])
 
   const items: IPOItem[] = useMemo(() => {
     const raw = tab === 'listed' ? (data?.listed || []) : (data?.upcoming || [])
 
-    // Filter by search
     const filtered = search
       ? raw.filter(item =>
           item.symbol.toLowerCase().includes(search.toLowerCase()) ||
@@ -26,14 +29,22 @@ export default function IPOPage() {
         )
       : raw
 
-    // Sort: reminded items first, then by listing date descending
     return [...filtered].sort((a, b) => {
       const aReminded = reminderSymbols.has(a.symbol) ? 1 : 0
       const bReminded = reminderSymbols.has(b.symbol) ? 1 : 0
       if (aReminded !== bReminded) return bReminded - aReminded
-      return 0 // preserve original order (already sorted by date from backend)
+      return 0
     })
   }, [data, tab, search, reminderSymbols])
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pagedItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  // Reset page on tab/search change
+  const handleTabChange = (t: 'listed' | 'upcoming') => { setTab(t); setPage(1) }
+  const handleSearchChange = (v: string) => { setSearch(v); setPage(1) }
 
   const handleToggleReminder = (item: IPOItem) => {
     if (reminderSymbols.has(item.symbol)) {
@@ -77,7 +88,7 @@ export default function IPOPage() {
       <div className="flex items-center justify-between gap-4 border-b border-border-subtle">
         <div className="flex gap-1">
           <button
-            onClick={() => setTab('listed')}
+            onClick={() => handleTabChange('listed')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === 'listed'
                 ? 'border-accent text-accent'
@@ -87,7 +98,7 @@ export default function IPOPage() {
             已上市
           </button>
           <button
-            onClick={() => setTab('upcoming')}
+            onClick={() => handleTabChange('upcoming')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === 'upcoming'
                 ? 'border-accent text-accent'
@@ -102,7 +113,7 @@ export default function IPOPage() {
           <input
             type="text"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => handleSearchChange(e.target.value)}
             placeholder="搜索代码或名称..."
             className="pl-8 pr-3 py-1.5 text-sm rounded-lg bg-bg-card border border-border-subtle text-t-primary placeholder:text-t-faint focus:outline-none focus:border-accent/50 w-48"
           />
@@ -117,77 +128,115 @@ export default function IPOPage() {
           {search ? '无匹配结果' : tab === 'upcoming' ? '暂无待上市新股' : '暂无数据'}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border-subtle">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-bg-card/60 text-t-muted text-left">
-                <th className="px-3 py-2.5 font-medium">代码</th>
-                <th className="px-3 py-2.5 font-medium">股票名称</th>
-                <th className="px-3 py-2.5 font-medium">上市日期</th>
-                <th className="px-3 py-2.5 font-medium text-right">价格</th>
-                <th className="px-3 py-2.5 font-medium text-right">发行价</th>
-                <th className="px-3 py-2.5 font-medium text-right">首日涨幅</th>
-                <th className="px-3 py-2.5 font-medium text-right">累计涨幅</th>
-                <th className="px-3 py-2.5 font-medium">行业</th>
-                <th className="px-3 py-2.5 font-medium text-center">提醒</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {items.map((item) => {
-                const hasReminder = reminderSymbols.has(item.symbol)
-                const changeColor = (val: string) => {
-                  if (val.startsWith('+')) return 'text-gain'
-                  if (val.startsWith('-')) return 'text-loss'
-                  return 'text-t-secondary'
-                }
-                return (
-                  <tr
-                    key={item.symbol + item.listing_date}
-                    className={`hover:bg-bg-card/40 transition-colors ${hasReminder ? 'bg-yellow-500/5' : ''}`}
+        <>
+          <div className="overflow-x-auto rounded-xl border border-border-subtle">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-bg-card/60 text-t-muted text-left">
+                  <th className="px-3 py-2.5 font-medium">代码</th>
+                  <th className="px-3 py-2.5 font-medium">股票名称</th>
+                  <th className="px-3 py-2.5 font-medium">上市日期</th>
+                  <th className="px-3 py-2.5 font-medium text-right">价格</th>
+                  <th className="px-3 py-2.5 font-medium text-right">发行价</th>
+                  <th className="px-3 py-2.5 font-medium text-right">首日涨幅</th>
+                  <th className="px-3 py-2.5 font-medium text-right">累计涨幅</th>
+                  <th className="px-3 py-2.5 font-medium">行业</th>
+                  <th className="px-3 py-2.5 font-medium text-center">提醒</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {pagedItems.map((item) => {
+                  const hasReminder = reminderSymbols.has(item.symbol)
+                  const changeColor = (val: string) => {
+                    if (val.startsWith('+')) return 'text-gain'
+                    if (val.startsWith('-')) return 'text-loss'
+                    return 'text-t-secondary'
+                  }
+                  return (
+                    <tr
+                      key={item.symbol + item.listing_date}
+                      className={`hover:bg-bg-card/40 transition-colors ${hasReminder ? 'bg-yellow-500/5' : ''}`}
+                    >
+                      <td className="px-3 py-2.5 font-mono text-accent font-medium">
+                        {item.symbol}
+                      </td>
+                      <td className="px-3 py-2.5 text-t-primary max-w-[200px] truncate">
+                        {item.name}
+                      </td>
+                      <td className="px-3 py-2.5 text-t-secondary tabular-nums">
+                        {item.listing_date || '待披露'}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-t-primary tabular-nums">
+                        {item.price}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-t-secondary tabular-nums">
+                        {item.ipo_price}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${changeColor(item.first_day_change)}`}>
+                        {item.first_day_change}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${changeColor(item.cumulative_change)}`}>
+                        {item.cumulative_change}
+                      </td>
+                      <td className="px-3 py-2.5 text-t-muted text-xs">
+                        {item.industry}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button
+                          onClick={() => handleToggleReminder(item)}
+                          className={`p-1 rounded transition-colors ${
+                            hasReminder
+                              ? 'text-yellow-400 hover:text-yellow-300'
+                              : 'text-t-faint hover:text-t-secondary'
+                          }`}
+                          title={hasReminder ? '取消提醒' : '设置上市提醒'}
+                        >
+                          {hasReminder ? <BellRing size={16} /> : <Bell size={16} />}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-t-muted">
+              <span>共 {items.length} 条</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="p-1 rounded hover:bg-bg-card disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-7 h-7 rounded text-xs ${
+                      p === currentPage
+                        ? 'bg-accent text-white'
+                        : 'hover:bg-bg-card text-t-muted'
+                    }`}
                   >
-                    <td className="px-3 py-2.5 font-mono text-accent font-medium">
-                      {item.symbol}
-                    </td>
-                    <td className="px-3 py-2.5 text-t-primary max-w-[200px] truncate">
-                      {item.name}
-                    </td>
-                    <td className="px-3 py-2.5 text-t-secondary tabular-nums">
-                      {item.listing_date || '待披露'}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-t-primary tabular-nums">
-                      {item.price}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-t-secondary tabular-nums">
-                      {item.ipo_price}
-                    </td>
-                    <td className={`px-3 py-2.5 text-right tabular-nums ${changeColor(item.first_day_change)}`}>
-                      {item.first_day_change}
-                    </td>
-                    <td className={`px-3 py-2.5 text-right tabular-nums ${changeColor(item.cumulative_change)}`}>
-                      {item.cumulative_change}
-                    </td>
-                    <td className="px-3 py-2.5 text-t-muted text-xs">
-                      {item.industry}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() => handleToggleReminder(item)}
-                        className={`p-1 rounded transition-colors ${
-                          hasReminder
-                            ? 'text-yellow-400 hover:text-yellow-300'
-                            : 'text-t-faint hover:text-t-secondary'
-                        }`}
-                        title={hasReminder ? '取消提醒' : '设置上市提醒'}
-                      >
-                        {hasReminder ? <BellRing size={16} /> : <Bell size={16} />}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                    {p}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="p-1 rounded hover:bg-bg-card disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
