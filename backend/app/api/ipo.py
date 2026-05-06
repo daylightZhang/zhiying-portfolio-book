@@ -36,7 +36,7 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1920, "height": 5000})
 
         def handle_response(response):
             url = response.url
@@ -64,7 +64,7 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(4000)
 
         # Extract finished list from SSR HTML
         if not finished_raw and ssr_html_captured:
@@ -87,31 +87,34 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
                             continue
                     break
 
-        # Remove popups/overlays
+        # Remove popups/overlays and click "待上市" tab via JS (more reliable)
         page.evaluate("""() => {
             document.querySelectorAll('[class*="gold-flow"], [class*="popup"]').forEach(el => el.remove());
+            const spans = document.querySelectorAll('span');
+            for (const s of spans) {
+                if (s.textContent.trim() === '待上市' && s.classList.contains('rank-item')) {
+                    s.click();
+                    break;
+                }
+            }
         }""")
+        page.wait_for_timeout(5000)
 
-        # Click "待上市" tab
-        try:
-            tab = page.locator("span:has-text('待上市')").first
-            if tab.is_visible(timeout=3000):
-                tab.click(force=True)
-                page.wait_for_timeout(4000)
-
-                # Click through remaining pages
-                for page_num in range(2, 20):
-                    btn = page.locator(f".base-pagination span.item:has-text('{page_num}')").first
-                    try:
-                        if btn.is_visible(timeout=1500):
-                            btn.click(force=True)
-                            page.wait_for_timeout(3000)
-                        else:
-                            break
-                    except Exception:
-                        break
-        except Exception as e:
-            logger.warning(f"Could not fetch 待上市 data: {e}")
+        # Click through all pages via JS (avoids viewport/overlay issues)
+        for page_num in range(2, 20):
+            clicked = page.evaluate(f"""() => {{
+                const btns = document.querySelectorAll('.base-pagination span.item');
+                for (const b of btns) {{
+                    if (b.textContent.trim() === '{page_num}') {{
+                        b.click();
+                        return true;
+                    }}
+                }}
+                return false;
+            }}""")
+            if not clicked:
+                break
+            page.wait_for_timeout(4000)
 
         browser.close()
 
