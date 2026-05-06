@@ -5,7 +5,9 @@ export function useIPOList() {
   return useQuery({
     queryKey: ['ipo', 'list'],
     queryFn: ipoApi.getIPOList,
-    refetchInterval: 3600 * 1000, // 1 hour
+    staleTime: 3600 * 1000, // data stays fresh for 1 hour
+    refetchInterval: 3600 * 1000, // background refresh every 1 hour
+    refetchOnWindowFocus: false,
   })
 }
 
