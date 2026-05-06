@@ -91,14 +91,13 @@ def refresh_all_prices(db: Session, account_id: int = 1) -> dict:
             except Exception:
                 pass
             try:
-                ticker = yf.Ticker(symbol)
-                price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+                price = _yfinance_best_price(symbol)
                 if price:
-                    return {"symbol": symbol, "price": float(price), "status": "ok", "source": "yfinance", "realtime": True}
+                    return {"symbol": symbol, "price": price, "status": "ok", "source": "yfinance", "realtime": True}
             except Exception:
                 pass
             try:
-                price = _finance_query_price(symbol)
+                price = _finance_query_best_price(symbol)
                 if price:
                     return {"symbol": symbol, "price": price, "status": "ok", "source": "finance-query"}
             except Exception:
@@ -312,12 +311,10 @@ def _refresh_yfinance(db: Session, holdings: list[Holding], results: dict, now: 
 
 
 def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now: datetime):
-    # Try yfinance individual ticker first
+    # Try yfinance (with pre/post market support)
     try:
-        ticker = yf.Ticker(symbol)
-        price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+        price = _yfinance_best_price(symbol)
         if price:
-            price = float(price)
             for h in symbol_to_holdings.get(symbol, []):
                 h.current_price = price
                 h.price_updated_at = now
@@ -327,9 +324,9 @@ def _yfinance_fallback(symbol: str, symbol_to_holdings: dict, results: dict, now
     except Exception:
         pass
 
-    # Fallback 2: finance-query.com
+    # Fallback 2: finance-query.com (with pre/post market support)
     try:
-        price = _finance_query_price(symbol)
+        price = _finance_query_best_price(symbol)
         if price:
             for h in symbol_to_holdings.get(symbol, []):
                 h.current_price = price
@@ -403,17 +400,17 @@ def refresh_single_price(db: Session, symbol: str, account_id: int = 1) -> dict:
             pass
         if price is None:
             try:
-                ticker = yf.Ticker(symbol)
-                p = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+                p = _yfinance_best_price(symbol)
                 if p:
-                    price = float(p)
+                    price = p
                     source = "yfinance"
             except Exception:
                 pass
         if price is None:
             try:
-                price = _finance_query_price(symbol)
-                if price:
+                p = _finance_query_best_price(symbol)
+                if p:
+                    price = p
                     source = "finance-query"
             except Exception:
                 pass
@@ -516,7 +513,7 @@ def _google_finance_price(symbol: str) -> float | None:
 
 
 def _finance_query_price(symbol: str) -> float | None:
-    """Get a single stock/index price from finance-query.com."""
+    """Get a single stock/index price from finance-query.com (regular market only)."""
     import httpx
     resp = httpx.get(f"https://finance-query.com/v2/quote/{symbol}", timeout=5)
     if resp.status_code == 200:
@@ -524,6 +521,59 @@ def _finance_query_price(symbol: str) -> float | None:
         price = d.get("regularMarketPrice")
         return float(price) if price else None
     return None
+
+
+def _finance_query_best_price(symbol: str) -> float | None:
+    """Get best available price from finance-query: pre/post market if available, else regular."""
+    import httpx
+    resp = httpx.get(f"https://finance-query.com/v2/quote/{symbol}", timeout=5)
+    if resp.status_code != 200:
+        return None
+    d = resp.json()
+    state = d.get("marketState", "")
+    # Pre-market
+    if state == "PRE":
+        pre = d.get("preMarketPrice")
+        if pre:
+            return float(pre)
+    # Post-market
+    if state == "POST":
+        post = d.get("postMarketPrice")
+        if post:
+            return float(post)
+    # Regular or closed — use regular price
+    price = d.get("regularMarketPrice")
+    return float(price) if price else None
+
+
+def _yfinance_best_price(symbol: str) -> float | None:
+    """Get best available price from yfinance: pre/post market if in extended hours."""
+    ticker = yf.Ticker(symbol)
+    try:
+        info = ticker.info
+    except Exception:
+        # Fallback to fast_info
+        price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+        return float(price) if price else None
+
+    state = info.get("marketState", "")
+    # Pre-market
+    if state == "PRE":
+        pre = info.get("preMarketPrice")
+        if pre:
+            return float(pre)
+    # Post-market
+    if state == "POST" or state == "POSTPOST":
+        post = info.get("postMarketPrice")
+        if post:
+            return float(post)
+    # Regular session or closed — use regular/current price
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    if price:
+        return float(price)
+    # Final fallback
+    price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get("previousClose")
+    return float(price) if price else None
 
 
 def _fetch_indices_finance_query() -> list[dict]:
