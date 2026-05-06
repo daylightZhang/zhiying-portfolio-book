@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
-from app.api import holdings, transactions, market_data, portfolio, cash, accounts, news
-from app.models import market_quote  # noqa: F401 — ensure table is created
+from app.api import holdings, transactions, market_data, portfolio, cash, accounts, news, ipo
+from app.models import market_quote, ipo_reminder  # noqa: F401 — ensure tables are created
 
 
 def _migrate_db():
@@ -194,6 +194,7 @@ app.include_router(market_data.router, prefix="/api/v1")
 app.include_router(portfolio.router, prefix="/api/v1")
 app.include_router(cash.router, prefix="/api/v1")
 app.include_router(news.router, prefix="/api/v1")
+app.include_router(ipo.router, prefix="/api/v1")
 
 
 @app.get("/api/health")

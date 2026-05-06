@@ -1,5 +1,34 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-06 v1.11.0 - 美股IPO监测 + 上市提醒
+
+### 新增
+- **美股IPO监测页面**: 侧边栏新增"美股IPO"菜单项
+  - 数据源: moomoo.com 新股中心页面爬取 (`__INITIAL_STATE__` 解析)
+  - "已上市" / "待上市" Tab 切换
+  - 展示: 代码、股票名称、上市日期、价格、发行价、首日涨幅、累计涨幅、行业
+  - 按上市日期从近到远排列
+  - 后端 1 小时缓存 TTL，失败时返回旧缓存
+- **IPO 上市提醒**: 每只 IPO 可点击铃铛设置/取消提醒
+  - 上市日期前 7 天至上市当天，左上角弹出持久提醒弹窗
+  - 提醒弹窗不自动消失，必须手动关闭
+  - 每条提醒每天只弹出一次（关闭后当天不再弹出）
+  - 提醒弹窗与新闻提醒、Toast 通知互不干扰（独立定位）
+  - 支持多条提醒同时显示（垂直堆叠）
+
+### 数据库
+- 新增 `ipo_reminders` 表 (symbol UNIQUE, name, listing_date)
+
+### 新文件
+- `backend/app/api/ipo.py` — IPO 爬取 + 提醒 API
+- `backend/app/models/ipo_reminder.py` — 提醒数据模型
+- `frontend/src/api/ipo.ts` — IPO API 调用
+- `frontend/src/hooks/useIPO.ts` — React Query hooks
+- `frontend/src/pages/IPOPage.tsx` — IPO 页面
+- `frontend/src/components/common/IPOAlert.tsx` — 提醒弹窗组件
+
+---
+
 ## 2026-04-29 v1.10.0 - 行情缓存独立表 + UI 优化
 
 ### 重构
