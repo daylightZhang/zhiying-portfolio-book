@@ -87,14 +87,31 @@ def _fetch_ipo_data_playwright() -> tuple[list[dict], list[dict]]:
                             continue
                     break
 
-        # Click "待上市" tab to trigger the XHR for applying list
+        # Remove popups/overlays that may intercept clicks
+        page.evaluate("""() => {
+            document.querySelectorAll('[class*="gold-flow"], [class*="popup"]').forEach(el => el.remove());
+        }""")
+
+        # Click "待上市" tab to trigger the XHR for applying list (page 0)
         try:
             tab = page.locator("span:has-text('待上市')").first
             if tab.is_visible(timeout=3000):
-                tab.click()
+                tab.click(force=True)
                 page.wait_for_timeout(4000)
+
+                # Click through remaining pages (span.item inside .base-pagination)
+                for page_num in range(2, 20):  # pages are 1-indexed in UI
+                    btn = page.locator(f".base-pagination span.item:has-text('{page_num}')").first
+                    try:
+                        if btn.is_visible(timeout=1500):
+                            btn.click(force=True)
+                            page.wait_for_timeout(3000)
+                        else:
+                            break
+                    except Exception:
+                        break
         except Exception as e:
-            logger.warning(f"Could not click 待上市 tab: {e}")
+            logger.warning(f"Could not fetch 待上市 data: {e}")
 
         browser.close()
 

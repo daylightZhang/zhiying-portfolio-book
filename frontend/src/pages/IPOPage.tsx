@@ -1,22 +1,39 @@
-import { useState } from 'react'
-import { RefreshCw, Bell, BellRing } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { RefreshCw, Bell, BellRing, Search } from 'lucide-react'
 import { useIPOList, useIPOReminders, useAddReminder, useRemoveReminder } from '../hooks/useIPO'
 import { useToast } from '../hooks/useToast'
 import type { IPOItem } from '../api/ipo'
 
 export default function IPOPage() {
-  const { data, isLoading, dataUpdatedAt, refetch, isFetching } = useIPOList()
+  const { data, isLoading, refetch, isFetching } = useIPOList()
   const { data: reminders } = useIPOReminders()
   const addReminder = useAddReminder()
   const removeReminder = useRemoveReminder()
   const { showToast } = useToast()
   const [tab, setTab] = useState<'listed' | 'upcoming'>('listed')
+  const [search, setSearch] = useState('')
 
   const reminderSymbols = new Set(reminders?.map(r => r.symbol) || [])
 
-  const items: IPOItem[] = tab === 'listed'
-    ? (data?.listed || [])
-    : (data?.upcoming || [])
+  const items: IPOItem[] = useMemo(() => {
+    const raw = tab === 'listed' ? (data?.listed || []) : (data?.upcoming || [])
+
+    // Filter by search
+    const filtered = search
+      ? raw.filter(item =>
+          item.symbol.toLowerCase().includes(search.toLowerCase()) ||
+          item.name.toLowerCase().includes(search.toLowerCase())
+        )
+      : raw
+
+    // Sort: reminded items first, then by listing date descending
+    return [...filtered].sort((a, b) => {
+      const aReminded = reminderSymbols.has(a.symbol) ? 1 : 0
+      const bReminded = reminderSymbols.has(b.symbol) ? 1 : 0
+      if (aReminded !== bReminded) return bReminded - aReminded
+      return 0 // preserve original order (already sorted by date from backend)
+    })
+  }, [data, tab, search, reminderSymbols])
 
   const handleToggleReminder = (item: IPOItem) => {
     if (reminderSymbols.has(item.symbol)) {
@@ -35,11 +52,6 @@ export default function IPOPage() {
     }
   }
 
-  const formatUpdateTime = () => {
-    if (!data?.updated_at) return ''
-    return data.updated_at
-  }
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -48,7 +60,7 @@ export default function IPOPage() {
           <h1 className="text-xl font-bold text-t-primary">美股IPO</h1>
           <p className="text-xs text-t-muted mt-0.5">
             数据来源: moomoo.com
-            {formatUpdateTime() && ` · 更新于 ${formatUpdateTime()}`}
+            {data?.updated_at && ` · 更新于 ${data.updated_at}`}
           </p>
         </div>
         <button
@@ -61,28 +73,40 @@ export default function IPOPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-border-subtle">
-        <button
-          onClick={() => setTab('listed')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'listed'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-t-muted hover:text-t-secondary'
-          }`}
-        >
-          已上市
-        </button>
-        <button
-          onClick={() => setTab('upcoming')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'upcoming'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-t-muted hover:text-t-secondary'
-          }`}
-        >
-          待上市
-        </button>
+      {/* Tabs + Search */}
+      <div className="flex items-center justify-between gap-4 border-b border-border-subtle">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setTab('listed')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'listed'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-t-muted hover:text-t-secondary'
+            }`}
+          >
+            已上市
+          </button>
+          <button
+            onClick={() => setTab('upcoming')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'upcoming'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-t-muted hover:text-t-secondary'
+            }`}
+          >
+            待上市
+          </button>
+        </div>
+        <div className="relative mb-1">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t-faint" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="搜索代码或名称..."
+            className="pl-8 pr-3 py-1.5 text-sm rounded-lg bg-bg-card border border-border-subtle text-t-primary placeholder:text-t-faint focus:outline-none focus:border-accent/50 w-48"
+          />
+        </div>
       </div>
 
       {/* Table */}
@@ -90,7 +114,7 @@ export default function IPOPage() {
         <div className="text-center py-12 text-t-muted">加载中...</div>
       ) : items.length === 0 ? (
         <div className="text-center py-12 text-t-muted">
-          {tab === 'upcoming' ? '暂无待上市新股' : '暂无数据'}
+          {search ? '无匹配结果' : tab === 'upcoming' ? '暂无待上市新股' : '暂无数据'}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border-subtle">
@@ -119,7 +143,7 @@ export default function IPOPage() {
                 return (
                   <tr
                     key={item.symbol + item.listing_date}
-                    className="hover:bg-bg-card/40 transition-colors"
+                    className={`hover:bg-bg-card/40 transition-colors ${hasReminder ? 'bg-yellow-500/5' : ''}`}
                   >
                     <td className="px-3 py-2.5 font-mono text-accent font-medium">
                       {item.symbol}
@@ -128,7 +152,7 @@ export default function IPOPage() {
                       {item.name}
                     </td>
                     <td className="px-3 py-2.5 text-t-secondary tabular-nums">
-                      {item.listing_date}
+                      {item.listing_date || '待披露'}
                     </td>
                     <td className="px-3 py-2.5 text-right text-t-primary tabular-nums">
                       {item.price}
