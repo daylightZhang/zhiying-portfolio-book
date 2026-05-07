@@ -436,6 +436,8 @@ def refresh_single_price(db: Session, symbol: str, account_id: int = 1) -> dict:
 
 MARKET_INDICES = [
     {"symbol": "000001.SS", "name": "上证指数"},
+    {"symbol": "399006.SZ", "name": "创业板指"},
+    {"symbol": "000688.SS", "name": "科创50"},
     {"symbol": "^GSPC", "name": "标普500"},
     {"symbol": "^IXIC", "name": "纳斯达克"},
     {"symbol": "^HSI", "name": "恒生指数"},
