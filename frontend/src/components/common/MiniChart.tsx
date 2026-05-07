@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getChart } from '../../api/portfolio'
 import type { ChartCandle } from '../../api/portfolio'
@@ -7,6 +7,12 @@ interface Props {
   symbol: string
   children: React.ReactNode
 }
+
+const RANGES = [
+  { label: '日内', range: '1d', interval: '5m' },
+  { label: '1月', range: '1mo', interval: '1d' },
+  { label: '3月', range: '3mo', interval: '1d' },
+] as const
 
 function CandleChart({ candles }: { candles: ChartCandle[] }) {
   const width = 320
@@ -28,13 +34,11 @@ function CandleChart({ candles }: { candles: ChartCandle[] }) {
 
   const yScale = (price: number) => padding.top + chartH - ((price - minPrice) / priceRange) * chartH
 
-  // Price grid lines
   const gridLines = 4
   const priceStep = priceRange / gridLines
 
   return (
     <svg width={width} height={height} className="block">
-      {/* Grid lines + labels */}
       {Array.from({ length: gridLines + 1 }, (_, i) => {
         const price = minPrice + priceStep * i
         const y = yScale(price)
@@ -47,7 +51,6 @@ function CandleChart({ candles }: { candles: ChartCandle[] }) {
           </g>
         )
       })}
-      {/* Candles */}
       {candles.map((c, i) => {
         const x = padding.left + i * gap + gap / 2
         const isUp = c.close >= c.open
@@ -57,21 +60,18 @@ function CandleChart({ candles }: { candles: ChartCandle[] }) {
         const bodyH = Math.max(1, bodyBottom - bodyTop)
         return (
           <g key={i}>
-            {/* Wick */}
             <line x1={x} x2={x} y1={yScale(c.high)} y2={yScale(c.low)} stroke={color} strokeWidth={0.8} />
-            {/* Body */}
             <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyH} fill={color} />
           </g>
         )
       })}
-      {/* Date labels */}
-      {candles.filter((_, i) => i % Math.ceil(candles.length / 4) === 0).map((c, i) => {
+      {candles.filter((_, i) => i % Math.ceil(candles.length / 4) === 0).map((c) => {
         const idx = candles.indexOf(c)
         const x = padding.left + idx * gap + gap / 2
         const date = new Date(c.timestamp * 1000)
         const label = `${date.getMonth() + 1}/${date.getDate()}`
         return (
-          <text key={i} x={x} y={height - 4} textAnchor="middle" className="fill-t-faint" fontSize={9}>
+          <text key={idx} x={x} y={height - 4} textAnchor="middle" className="fill-t-faint" fontSize={9}>
             {label}
           </text>
         )
@@ -82,39 +82,59 @@ function CandleChart({ candles }: { candles: ChartCandle[] }) {
 
 export default function MiniChart({ symbol, children }: Props) {
   const [show, setShow] = useState(false)
+  const [rangeIdx, setRangeIdx] = useState(2) // default: 3mo
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const triggerRef = useRef<HTMLSpanElement>(null)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const showTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const currentRange = RANGES[rangeIdx]
 
   const { data } = useQuery({
-    queryKey: ['chart', symbol],
-    queryFn: () => getChart(symbol, '3mo', '1d'),
+    queryKey: ['chart', symbol, currentRange.range, currentRange.interval],
+    queryFn: () => getChart(symbol, currentRange.range, currentRange.interval),
     enabled: show,
-    staleTime: 600 * 1000, // 10 min
+    staleTime: 600 * 1000,
     refetchOnWindowFocus: false,
   })
 
-  const handleMouseEnter = () => {
-    timeoutRef.current = setTimeout(() => {
-      if (triggerRef.current) {
-        const rect = triggerRef.current.getBoundingClientRect()
-        setPos({ x: rect.left, y: rect.bottom + 6 })
-      }
-      setShow(true)
-    }, 300) // slight delay to avoid flicker
+  const showPopup = () => {
+    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setPos({ x: rect.left, y: rect.bottom + 6 })
+    }
+    setShow(true)
   }
 
-  const handleMouseLeave = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    setShow(false)
+  const scheduleHide = () => {
+    hideTimeoutRef.current = setTimeout(() => setShow(false), 200)
+  }
+
+  const handleTriggerEnter = () => {
+    if (showTimeoutRef.current) clearTimeout(showTimeoutRef.current)
+    showTimeoutRef.current = setTimeout(showPopup, 300)
+  }
+
+  const handleTriggerLeave = () => {
+    if (showTimeoutRef.current) clearTimeout(showTimeoutRef.current)
+    scheduleHide()
+  }
+
+  const handlePopupEnter = () => {
+    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
+  }
+
+  const handlePopupLeave = () => {
+    scheduleHide()
   }
 
   return (
     <>
       <span
         ref={triggerRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={handleTriggerEnter}
+        onMouseLeave={handleTriggerLeave}
         className="cursor-pointer"
       >
         {children}
@@ -123,10 +143,29 @@ export default function MiniChart({ symbol, children }: Props) {
         <div
           className="fixed z-[200] rounded-xl bg-bg-card/98 border border-border-subtle shadow-2xl glass p-2 animate-fadeIn"
           style={{ left: pos.x, top: pos.y }}
-          onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }}
-          onMouseLeave={handleMouseLeave}
+          onMouseEnter={handlePopupEnter}
+          onMouseLeave={handlePopupLeave}
         >
-          <div className="text-xs text-t-muted px-1 mb-1 font-mono">{symbol} · 3个月</div>
+          {/* Header: symbol + range selector */}
+          <div className="flex items-center justify-between px-1 mb-1">
+            <span className="text-xs text-t-muted font-mono">{symbol}</span>
+            <div className="flex gap-0.5">
+              {RANGES.map((r, i) => (
+                <button
+                  key={r.range}
+                  onClick={() => setRangeIdx(i)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    i === rangeIdx
+                      ? 'bg-accent/20 text-accent font-medium'
+                      : 'text-t-faint hover:text-t-secondary'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Chart */}
           {data && data.candles.length > 0 ? (
             <CandleChart candles={data.candles} />
           ) : (
