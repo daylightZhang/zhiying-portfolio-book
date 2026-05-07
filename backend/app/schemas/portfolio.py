@@ -27,6 +27,16 @@ class HoldingSummary(BaseModel):
     broker_account_name: str | None = None
 
 
+class RealizedPnlItem(BaseModel):
+    holding_id: int
+    symbol: str
+    name: str
+    currency: str
+    realized_pnl_native: float
+    realized_pnl_base: float
+    source: str = "own"  # "own" | "linked"
+
+
 class MarketBreakdown(BaseModel):
     value: float
     weight_pct: float
@@ -42,6 +52,7 @@ class PortfolioSummary(BaseModel):
     total_cash: float
     cash_balances: dict[str, float]
     holdings: list[HoldingSummary]
+    realized_pnl_details: list[RealizedPnlItem] = []
     by_market: dict[str, MarketBreakdown]
     by_currency: dict[str, MarketBreakdown]
     exchange_rates: dict[str, float]

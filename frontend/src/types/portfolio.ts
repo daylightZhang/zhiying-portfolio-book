@@ -21,6 +21,16 @@ export interface HoldingSummary {
   broker_account_name: string | null
 }
 
+export interface RealizedPnlItem {
+  holding_id: number
+  symbol: string
+  name: string
+  currency: string
+  realized_pnl_native: number
+  realized_pnl_base: number
+  source: 'own' | 'linked'
+}
+
 export interface MarketBreakdown {
   value: number
   weight_pct: number
@@ -36,6 +46,7 @@ export interface PortfolioSummary {
   total_cash: number
   cash_balances: Record<string, number>
   holdings: HoldingSummary[]
+  realized_pnl_details: RealizedPnlItem[]
   by_market: Record<string, MarketBreakdown>
   by_currency: Record<string, MarketBreakdown>
   exchange_rates: Record<string, number>

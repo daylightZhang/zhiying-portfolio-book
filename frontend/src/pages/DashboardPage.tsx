@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast'
 import CurrencySelector from '../components/dashboard/CurrencySelector'
 import PortfolioSummaryCard from '../components/dashboard/PortfolioSummaryCard'
 import HoldingsTable from '../components/dashboard/HoldingsTable'
+import RealizedPnlTable from '../components/dashboard/RealizedPnlTable'
 import MarketBreakdownChart from '../components/dashboard/MarketBreakdownChart'
 import CashPanel from '../components/dashboard/CashPanel'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -149,6 +150,14 @@ export default function DashboardPage() {
         <div>
           <h3 className="text-sm font-medium text-t-muted mb-3">持仓明细</h3>
           <HoldingsTable holdings={summary.holdings} currency={baseCurrency} />
+        </div>
+      )}
+
+      {/* Realized P&L Table */}
+      {summary && summary.realized_pnl_details.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-t-muted mb-3">已实现盈亏</h3>
+          <RealizedPnlTable items={summary.realized_pnl_details} currency={baseCurrency} />
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.holding import Holding
 from app.models.transaction import Transaction
 from app.models.market_quote import MarketQuote
-from app.schemas.portfolio import PortfolioSummary, HoldingSummary, MarketBreakdown, ExchangeRateResponse
+from app.schemas.portfolio import PortfolioSummary, HoldingSummary, MarketBreakdown, ExchangeRateResponse, RealizedPnlItem
 from app.services import holding_service, currency_service, cash_service
 from app.utils.ticker import MARKET_LABELS
 
@@ -104,8 +104,8 @@ def get_summary(
 
     # Realized P&L: replay all transactions to compute accurately
     total_realized_pnl = 0.0
+    realized_pnl_details: list[RealizedPnlItem] = []
     all_holdings_ids = [h.id for h in holdings]
-    # Also include deleted holdings' transactions (holding_id still in DB if cascade didn't clean)
     all_txs = list(db.scalars(
         select(Transaction)
         .where(Transaction.account_id == account_id)
@@ -113,33 +113,26 @@ def get_summary(
         .order_by(Transaction.transacted_at.asc())
     ).all())
 
-    # Group transactions by holding_id
     txs_by_holding: dict[int, list] = {}
     for tx in all_txs:
         txs_by_holding.setdefault(tx.holding_id, []).append(tx)
 
-    # For each holding (current + any with sell history), replay to get realized P&L
-    # Include zero-quantity holdings for currency/multiplier lookup
     all_holdings = list(db.scalars(select(Holding).where(Holding.account_id == account_id)).all())
     holding_map = {h.id: h for h in all_holdings}
     for hid, txs in txs_by_holding.items():
         h = holding_map.get(hid)
         multiplier = (getattr(h, 'contract_multiplier', 1.0) or 1.0) if h else 1.0
         ratio = (getattr(h, 'holding_ratio', 1.0) or 1.0) if h else 1.0
-        is_futures = h.market == "CN_FUTURES" if h else False
         currency = h.currency if h else next((t.currency for t in txs if t.currency), "CNY")
 
-        # Replay: track running avg cost
-        # Seed with holding's cost_price as fallback (in case initial BUY record is missing)
         running_qty = 0.0
         running_cost = h.cost_price if h else 0.0
-        seeded = False  # tracks whether we've seen a BUY/ADJUST
+        seeded = False
         realized_native = 0.0
 
         for tx in txs:
             if tx.type == "BUY":
                 if not seeded:
-                    # First BUY establishes the baseline, reset seed
                     running_cost = 0.0
                     running_qty = 0.0
                     seeded = True
@@ -155,7 +148,18 @@ def get_summary(
                 running_cost = tx.price
 
         fx_rate = currency_service.get_rate(db, currency, base_currency)
-        total_realized_pnl += realized_native * fx_rate
+        realized_base = realized_native * fx_rate
+        total_realized_pnl += realized_base
+        if realized_native != 0:
+            realized_pnl_details.append(RealizedPnlItem(
+                holding_id=hid,
+                symbol=h.symbol if h else f"#{hid}",
+                name=h.name if h else "",
+                currency=currency,
+                realized_pnl_native=realized_native,
+                realized_pnl_base=realized_base,
+                source="own",
+            ))
 
     # Linked holdings: compute realized P&L from broker's transactions × link ratio
     for h in all_holdings:
@@ -173,7 +177,6 @@ def get_summary(
         if not broker_txs:
             continue
         b_multiplier = broker_h.contract_multiplier or 1.0
-        b_is_futures = broker_h.market == "CN_FUTURES"
         link_ratio = h.holding_ratio or 1.0
         b_running_qty = 0.0
         b_running_cost = broker_h.cost_price
@@ -195,9 +198,19 @@ def get_summary(
                 b_seeded = True
                 b_running_qty = tx.quantity
                 b_running_cost = tx.price
-        # Apply link ratio and convert currency
         fx_rate = currency_service.get_rate(db, broker_h.currency, base_currency)
-        total_realized_pnl += b_realized * link_ratio * fx_rate
+        realized_base = b_realized * link_ratio * fx_rate
+        total_realized_pnl += realized_base
+        if b_realized != 0:
+            realized_pnl_details.append(RealizedPnlItem(
+                holding_id=h.id,
+                symbol=h.symbol,
+                name=h.name,
+                currency=broker_h.currency,
+                realized_pnl_native=b_realized * link_ratio,
+                realized_pnl_base=realized_base,
+                source="linked",
+            ))
 
     # Cash balances
     cash_rows = cash_service.get_all_balances(db, account_id)
@@ -236,6 +249,7 @@ def get_summary(
         total_cash=total_cash,
         cash_balances=cash_balances_map,
         holdings=holding_summaries,
+        realized_pnl_details=realized_pnl_details,
         by_market=market_breakdown,
         by_currency=currency_breakdown,
         exchange_rates=rate_map,
