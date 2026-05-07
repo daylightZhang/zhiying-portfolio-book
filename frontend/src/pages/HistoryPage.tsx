@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useTransactions, useRollbackTransaction } from '../hooks/useTransactions'
+import { useTransactions, useDeleteTransaction } from '../hooks/useTransactions'
 import { useToast } from '../hooks/useToast'
 import { useHoldings } from '../hooks/useHoldings'
 import TransactionList from '../components/transactions/TransactionList'
@@ -27,7 +27,7 @@ export default function HistoryPage() {
   const [page, setPage] = useState(0)
 
   const { showToast } = useToast()
-  const rollbackMut = useRollbackTransaction()
+  const deleteMut = useDeleteTransaction()
   const { data: holdings } = useHoldings()
   const { data, isLoading } = useTransactions({
     holding_id: holdingId ? Number(holdingId) : undefined,
@@ -114,10 +114,10 @@ export default function HistoryPage() {
       ) : (
         <div className="space-y-3">
           <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
-            <TransactionList transactions={transactions} onRollback={(txId) => {
-              rollbackMut.mutate(txId, {
-                onSuccess: () => showToast('回滚成功'),
-                onError: () => showToast('回滚失败', 'error'),
+            <TransactionList transactions={transactions} onDelete={(txId) => {
+              deleteMut.mutate(txId, {
+                onSuccess: () => showToast('删除成功'),
+                onError: () => showToast('删除失败', 'error'),
               })
             }} />
           </div>

@@ -38,19 +38,12 @@ def list_transactions(
     return response
 
 
-@router.post("/{tx_id}/rollback", response_model=TransactionResponse)
-def rollback_transaction(tx_id: int, account_id: int = Query(default=1), db: Session = Depends(get_db)):
-    tx = transaction_service.rollback_transaction(db, tx_id, account_id)
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found or cannot rollback")
-    resp = TransactionResponse.model_validate(tx)
-    if tx.holding:
-        resp.holding_name = tx.holding.name
-        resp.holding_symbol = tx.holding.symbol
-    elif tx.type in ("DEPOSIT", "WITHDRAW"):
-        resp.holding_name = "现金"
-        resp.holding_symbol = tx.currency or ""
-    return resp
+@router.delete("/{tx_id}")
+def delete_transaction(tx_id: int, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    ok = transaction_service.delete_transaction(db, tx_id, account_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"ok": True}
 
 
 @router.post("", response_model=TransactionResponse, status_code=201)

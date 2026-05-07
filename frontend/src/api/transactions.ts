@@ -27,7 +27,6 @@ export async function createTransaction(payload: TransactionCreate, accountId: n
   return data
 }
 
-export async function rollbackTransaction(txId: number, accountId: number = 1): Promise<Transaction> {
-  const { data } = await client.post(`/transactions/${txId}/rollback`, null, { params: { account_id: accountId } })
-  return data
+export async function deleteTransaction(txId: number, accountId: number = 1): Promise<void> {
+  await client.delete(`/transactions/${txId}`, { params: { account_id: accountId } })
 }

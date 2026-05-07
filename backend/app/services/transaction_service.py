@@ -125,107 +125,79 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
     return tx
 
 
-def rollback_transaction(db: Session, tx_id: int, account_id: int = 1) -> Transaction | None:
-    """Rollback a transaction by creating a reverse operation."""
+def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
+    """Delete a transaction and reverse its effects on holdings and cash."""
     tx = db.get(Transaction, tx_id)
     if not tx or tx.account_id != account_id:
-        return None
+        return False
 
     now = now_beijing()
 
     if tx.type == "BUY" and tx.holding_id:
         holding = db.get(Holding, tx.holding_id)
-        if not holding:
-            return None
-        # Reverse BUY: reduce quantity, add cash back
-        holding.quantity = max(0, holding.quantity - tx.quantity)
-        multiplier = holding.contract_multiplier or 1.0
-        cash_service.on_sell(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
-        # Recalc cost: replay all remaining BUY transactions
-        _recalc_cost(db, holding)
-        reverse = Transaction(
-            account_id=account_id, holding_id=tx.holding_id, type="SELL",
-            quantity=tx.quantity, price=tx.price, total_amount=tx.total_amount,
-            currency=tx.currency, notes=f"回滚买入 #{tx.id}", transacted_at=now,
-        )
+        if holding:
+            holding.quantity = max(0, holding.quantity - tx.quantity)
+            multiplier = holding.contract_multiplier or 1.0
+            cash_service.on_sell(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+            holding.updated_at = now
 
     elif tx.type == "SELL" and tx.holding_id:
         holding = db.get(Holding, tx.holding_id)
-        if not holding:
-            return None
-        # Reverse SELL: add quantity back, deduct cash
-        new_qty = holding.quantity + tx.quantity
-        if new_qty > 0:
-            holding.cost_price = (holding.quantity * holding.cost_price + tx.quantity * tx.price) / new_qty
-        holding.quantity = new_qty
-        multiplier = holding.contract_multiplier or 1.0
-        cash_service.on_buy(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
-        reverse = Transaction(
-            account_id=account_id, holding_id=tx.holding_id, type="BUY",
-            quantity=tx.quantity, price=tx.price, total_amount=tx.total_amount,
-            currency=tx.currency, notes=f"回滚卖出 #{tx.id}", transacted_at=now,
-        )
+        if holding:
+            holding.quantity = holding.quantity + tx.quantity
+            multiplier = holding.contract_multiplier or 1.0
+            cash_service.on_buy(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+            holding.updated_at = now
+
+    elif tx.type == "ADJUST" and tx.holding_id:
+        holding = db.get(Holding, tx.holding_id)
+        if holding and tx.notes:
+            # Parse "Adjusted from qty=X, cost=Y" to restore previous state
+            import re
+            m = re.search(r'qty=([\d.]+),\s*cost=([\d.]+)', tx.notes)
+            if m:
+                holding.quantity = float(m.group(1))
+                holding.cost_price = float(m.group(2))
+                holding.updated_at = now
 
     elif tx.type == "DEPOSIT":
-        # Reverse DEPOSIT: withdraw
         cash_service._update_balance(db, tx.currency or "CNY", -tx.price, account_id)
-        reverse = Transaction(
-            account_id=account_id, holding_id=None, type="WITHDRAW",
-            quantity=1, price=tx.price, total_amount=tx.price,
-            currency=tx.currency, notes=f"回滚入金 #{tx.id}", transacted_at=now,
-        )
 
     elif tx.type == "WITHDRAW":
-        # Reverse WITHDRAW: deposit
         cash_service._update_balance(db, tx.currency or "CNY", tx.price, account_id)
-        reverse = Transaction(
-            account_id=account_id, holding_id=None, type="DEPOSIT",
-            quantity=1, price=tx.price, total_amount=tx.price,
-            currency=tx.currency, notes=f"回滚出金 #{tx.id}", transacted_at=now,
-        )
 
-    else:
-        return None
-
-    db.add(reverse)
-    if tx.holding_id:
+    # For BUY/SELL on broker holdings, reverse linked portfolio effects
+    if tx.holding_id and tx.type in ("BUY", "SELL"):
         holding = db.get(Holding, tx.holding_id)
         if holding:
-            holding.updated_at = now
-            # Sync linked holdings if this is a broker account holding
             from app.models.account import Account
             from app.services.holding_service import sync_linked_holdings
             acct = db.get(Account, account_id)
             if acct and acct.type == "broker":
                 sync_linked_holdings(db, holding.id)
-                # Adjust cash in linked portfolio accounts (reverse of original) + create records
-                if tx.type in ("BUY", "SELL"):
-                    multiplier = holding.contract_multiplier or 1.0
-                    trade_amount = tx.quantity * tx.price * multiplier
-                    linked = list(db.scalars(
-                        select(Holding).where(Holding.linked_broker_holding_id == holding.id)
-                    ).all())
-                    for lh in linked:
-                        linked_amount = trade_amount * (lh.holding_ratio or 1.0)
-                        if tx.type == "BUY":
-                            cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
-                            db.add(Transaction(
-                                account_id=lh.account_id, holding_id=None, type="DEPOSIT",
-                                quantity=1, price=linked_amount, total_amount=linked_amount,
-                                currency=holding.currency, transacted_at=now,
-                                notes=f"回滚关联买入 {holding.symbol} #{tx.id}",
-                            ))
-                        else:
-                            cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
-                            db.add(Transaction(
-                                account_id=lh.account_id, holding_id=None, type="WITHDRAW",
-                                quantity=1, price=linked_amount, total_amount=linked_amount,
-                                currency=holding.currency, transacted_at=now,
-                                notes=f"回滚关联卖出 {holding.symbol} #{tx.id}",
-                            ))
+                multiplier = holding.contract_multiplier or 1.0
+                trade_amount = tx.quantity * tx.price * multiplier
+                linked = list(db.scalars(
+                    select(Holding).where(Holding.linked_broker_holding_id == holding.id)
+                ).all())
+                for lh in linked:
+                    linked_amount = trade_amount * (lh.holding_ratio or 1.0)
+                    if tx.type == "BUY":
+                        cash_service.on_sell(db, holding.currency, linked_amount, lh.account_id)
+                    else:
+                        cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
+
+    # Delete the transaction record
+    db.delete(tx)
+
+    # Recalc cost for the holding after deletion
+    if tx.holding_id and tx.type in ("BUY", "SELL"):
+        holding = db.get(Holding, tx.holding_id)
+        if holding:
+            _recalc_cost(db, holding)
+
     db.commit()
-    db.refresh(reverse)
-    return reverse
+    return True
 
 
 def _recalc_cost(db: Session, holding: Holding):

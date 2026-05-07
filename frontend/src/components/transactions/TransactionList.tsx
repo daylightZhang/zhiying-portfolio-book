@@ -1,6 +1,8 @@
-import { Undo2 } from 'lucide-react'
+import { useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import type { Transaction } from '../../types/transaction'
 import { formatNumber, formatDateTime } from '../../utils/format'
+import ConfirmDialog from '../common/ConfirmDialog'
 
 const TYPE_STYLES: Record<string, string> = {
   BUY: 'bg-blue-500/20 text-blue-600',
@@ -20,29 +22,30 @@ const TYPE_LABELS: Record<string, string> = {
 
 interface Props {
   transactions: Transaction[]
-  onRollback?: (txId: number) => void
+  onDelete?: (txId: number) => void
 }
 
-export default function TransactionList({ transactions, onRollback }: Props) {
+export default function TransactionList({ transactions, onDelete }: Props) {
+  const [confirmId, setConfirmId] = useState<number | null>(null)
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs text-t-faint uppercase tracking-wider">
-            <th className="px-4 py-3">时间</th>
-            <th className="px-4 py-3">持仓</th>
-            <th className="px-4 py-3">类型</th>
-            <th className="px-4 py-3 text-right">数量</th>
-            <th className="px-4 py-3 text-right">价格</th>
-            <th className="px-4 py-3 text-right">金额</th>
-            <th className="px-4 py-3">备注</th>
-            {onRollback && <th className="px-4 py-3 text-right">操作</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map(tx => {
-            const isRollbackRecord = tx.notes?.startsWith('回滚')
-            return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-t-faint uppercase tracking-wider">
+              <th className="px-4 py-3">时间</th>
+              <th className="px-4 py-3">持仓</th>
+              <th className="px-4 py-3">类型</th>
+              <th className="px-4 py-3 text-right">数量</th>
+              <th className="px-4 py-3 text-right">价格</th>
+              <th className="px-4 py-3 text-right">金额</th>
+              <th className="px-4 py-3">备注</th>
+              {onDelete && <th className="px-4 py-3 text-right">操作</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map(tx => (
               <tr key={tx.id} className="border-b border-border-subtle hover:bg-bg-hover/50 transition-colors">
                 <td className="px-4 py-3 text-t-muted whitespace-nowrap">{formatDateTime(tx.transacted_at)}</td>
                 <td className="px-4 py-3">
@@ -58,25 +61,31 @@ export default function TransactionList({ transactions, onRollback }: Props) {
                 <td className="px-4 py-3 text-right text-t-secondary">{formatNumber(tx.price)}</td>
                 <td className="px-4 py-3 text-right text-t-primary">{formatNumber(tx.total_amount)}</td>
                 <td className="px-4 py-3 text-t-faint max-w-[150px] truncate">{tx.notes || '—'}</td>
-                {onRollback && (
+                {onDelete && (
                   <td className="px-4 py-3 text-right">
-                    {!isRollbackRecord && (
-                      <button
-                        onClick={() => onRollback(tx.id)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-t-muted hover:text-accent hover:bg-accent-bg transition-all"
-                        title="回滚此操作"
-                      >
-                        <Undo2 size={13} />
-                        回滚
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setConfirmId(tx.id)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-t-muted hover:text-loss hover:bg-loss/10 transition-all"
+                      title="删除此记录"
+                    >
+                      <Trash2 size={13} />
+                      删除
+                    </button>
                   </td>
                 )}
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmDialog
+        open={confirmId !== null}
+        title="删除交易记录"
+        message="删除后将还原该交易对持仓和现金的影响，此操作不可恢复。"
+        onConfirm={() => { if (confirmId !== null) { onDelete?.(confirmId); setConfirmId(null) } }}
+        onCancel={() => setConfirmId(null)}
+      />
+    </>
   )
 }
