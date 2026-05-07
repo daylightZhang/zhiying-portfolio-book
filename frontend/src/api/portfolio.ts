@@ -8,6 +8,27 @@ export async function getPortfolioSummary(baseCurrency: string, accountId: numbe
   return data
 }
 
+export interface ChartCandle {
+  timestamp: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface ChartData {
+  candles: ChartCandle[]
+  symbol: string
+  range: string
+  interval: string
+}
+
+export async function getChart(symbol: string, range = '3mo', interval = '1d'): Promise<ChartData> {
+  const { data } = await client.get(`/market-data/chart/${symbol}`, { params: { range, interval } })
+  return data
+}
+
 export async function refreshPrices(accountId: number = 1): Promise<Record<string, unknown>> {
   const { data } = await client.post('/market-data/refresh', null, { params: { account_id: accountId } })
   return data

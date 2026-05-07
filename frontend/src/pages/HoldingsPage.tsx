@@ -7,6 +7,7 @@ import TradeDialog from '../components/holdings/TradeDialog'
 import MarketBadge from '../components/holdings/MarketBadge'
 import GainLossText from '../components/common/GainLossText'
 import ConfirmDialog from '../components/common/ConfirmDialog'
+import MiniChart from '../components/common/MiniChart'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import EmptyState from '../components/common/EmptyState'
 import CurrencySelector from '../components/dashboard/CurrencySelector'
@@ -165,7 +166,7 @@ export default function HoldingsPage() {
                   <tr key={h.id} className="border-b border-border-subtle hover:bg-bg-hover/50 transition-colors duration-150">
                     <td className="px-4 py-3">
                       <span className="font-medium text-t-primary">{h.name}</span>
-                      <span className="ml-2 text-xs text-t-faint">{h.symbol}</span>
+                      <MiniChart symbol={h.symbol}><span className="ml-2 text-xs text-t-faint hover:text-accent transition-colors">{h.symbol}</span></MiniChart>
                       {isLinked && (
                         <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600" title={`关联: ${h.broker_account_name}`}>
                           <Link size={9} />关联

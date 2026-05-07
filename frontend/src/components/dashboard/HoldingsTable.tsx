@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { HoldingSummary } from '../../types/portfolio'
 import MarketBadge from '../holdings/MarketBadge'
 import GainLossText from '../common/GainLossText'
+import MiniChart from '../common/MiniChart'
 import { formatNumber, formatCurrency } from '../../utils/format'
 import { useSettings } from '../../hooks/useSettings'
 
@@ -47,7 +48,7 @@ export default function HoldingsTable({ holdings, currency }: Props) {
                   <td className="px-4 py-3">
                     <div>
                       <span className="font-medium text-t-primary">{h.name}</span>
-                      <span className="ml-2 text-xs text-t-faint">{h.symbol}</span>
+                      <MiniChart symbol={h.symbol}><span className="ml-2 text-xs text-t-faint hover:text-accent transition-colors">{h.symbol}</span></MiniChart>
                     </div>
                   </td>
                   <td className="px-4 py-3"><MarketBadge market={h.market} /></td>

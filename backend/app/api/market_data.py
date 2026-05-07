@@ -25,3 +25,20 @@ def get_quote(symbol: str):
 @router.get("/indices")
 def get_indices():
     return market_data_service.get_market_indices()
+
+
+@router.get("/chart/{symbol}")
+def get_chart(symbol: str, range: str = "3mo", interval: str = "1d"):
+    """Get candlestick chart data from finance-query.com."""
+    import httpx
+    try:
+        resp = httpx.get(
+            f"https://finance-query.com/v2/chart/{symbol}",
+            params={"range": range, "interval": interval},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return {"candles": [], "symbol": symbol, "range": range, "interval": interval}
