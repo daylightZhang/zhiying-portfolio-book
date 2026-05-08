@@ -187,12 +187,17 @@ def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
                     else:
                         cash_service.on_buy(db, holding.currency, linked_amount, lh.account_id)
 
-    # Delete the transaction record
+    # Save holding_id and type before deleting (object may become detached)
+    tx_holding_id = tx.holding_id
+    tx_type = tx.type
+
+    # Delete the transaction record and flush so _recalc_cost won't see it
     db.delete(tx)
+    db.flush()
 
     # Recalc cost for the holding after deletion
-    if tx.holding_id and tx.type in ("BUY", "SELL"):
-        holding = db.get(Holding, tx.holding_id)
+    if tx_holding_id and tx_type in ("BUY", "SELL"):
+        holding = db.get(Holding, tx_holding_id)
         if holding:
             _recalc_cost(db, holding)
 
