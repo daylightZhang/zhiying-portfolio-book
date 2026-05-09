@@ -90,7 +90,7 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
         type="BUY",
         quantity=data.quantity,
         price=data.cost_price,
-        total_amount=data.quantity * data.cost_price,
+        total_amount=trade_amount,
         currency=currency.value,
         transacted_at=transacted_at,
     )
