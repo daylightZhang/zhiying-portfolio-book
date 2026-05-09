@@ -86,7 +86,7 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
     <aside className={`group/sidebar fixed left-0 top-0 z-40 flex h-full flex-col border-r border-border bg-bg-card/80 glass transition-all duration-300 ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Header */}
       <div className={`flex items-center py-5 ${collapsed ? 'justify-center px-2' : 'gap-3 px-5'}`}>
-        <img src="/logo.png" alt="知盈" className="h-9 w-9 rounded-lg shrink-0" />
+        <img src={theme === 'aurora' || theme === 'jade' ? '/logo_light.png' : '/logo.png'} alt="知盈" className="h-9 w-9 rounded-lg shrink-0" />
         {!collapsed && (
           <div>
             <h1 className="text-lg font-bold text-t-primary">知盈</h1>
