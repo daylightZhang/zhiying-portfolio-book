@@ -84,10 +84,20 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
         if new_qty > 0:
             holding.cost_price = (holding.quantity * holding.cost_price + data.quantity * data.price) / new_qty
         holding.quantity = new_qty
-        cash_service.on_buy(db, holding.currency, trade_amount, account_id)
+        if holding.market != "CN_FUTURES":
+            cash_service.on_buy(db, holding.currency, trade_amount, account_id)
     elif data.type.value == "SELL":
+        # For futures: only realized P&L affects cash
+        if holding.market == "CN_FUTURES":
+            ratio = holding.holding_ratio or 1.0
+            realized_pnl = (data.price - holding.cost_price) * data.quantity * multiplier * ratio
+            if realized_pnl > 0:
+                cash_service.on_sell(db, holding.currency, realized_pnl, account_id)
+            elif realized_pnl < 0:
+                cash_service.on_buy(db, holding.currency, abs(realized_pnl), account_id)
+        else:
+            cash_service.on_sell(db, holding.currency, trade_amount, account_id)
         holding.quantity = max(0, holding.quantity - data.quantity)
-        cash_service.on_sell(db, holding.currency, trade_amount, account_id)
     elif data.type.value == "ADJUST":
         holding.quantity = data.quantity
         holding.cost_price = data.price
@@ -143,11 +153,10 @@ def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
         if holding:
             holding.quantity = max(0, holding.quantity - tx.quantity)
             multiplier = holding.contract_multiplier or 1.0
-            if holding.market == "CN_FUTURES":
-                cash_amt = tx.quantity * tx.price * multiplier * (holding.margin_rate or 0.12) * (holding.holding_ratio or 1.0)
-            else:
+            if holding.market != "CN_FUTURES":
                 cash_amt = tx.quantity * tx.price * multiplier
-            cash_service.on_sell(db, holding.currency, cash_amt, account_id)
+                cash_service.on_sell(db, holding.currency, cash_amt, account_id)
+            # Futures BUY has no cash impact, so nothing to reverse
             holding.updated_at = now
 
     elif tx.type == "SELL" and tx.holding_id:
@@ -156,10 +165,16 @@ def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
             holding.quantity = holding.quantity + tx.quantity
             multiplier = holding.contract_multiplier or 1.0
             if holding.market == "CN_FUTURES":
-                cash_amt = tx.quantity * tx.price * multiplier * (holding.margin_rate or 0.12) * (holding.holding_ratio or 1.0)
+                # Reverse the realized P&L that was added/deducted
+                ratio = holding.holding_ratio or 1.0
+                realized_pnl = (tx.price - holding.cost_price) * tx.quantity * multiplier * ratio
+                if realized_pnl > 0:
+                    cash_service.on_buy(db, holding.currency, realized_pnl, account_id)
+                elif realized_pnl < 0:
+                    cash_service.on_sell(db, holding.currency, abs(realized_pnl), account_id)
             else:
                 cash_amt = tx.quantity * tx.price * multiplier
-            cash_service.on_buy(db, holding.currency, cash_amt, account_id)
+                cash_service.on_buy(db, holding.currency, cash_amt, account_id)
             holding.updated_at = now
 
     elif tx.type == "ADJUST" and tx.holding_id:

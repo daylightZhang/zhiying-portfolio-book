@@ -9,10 +9,11 @@ import { useToast } from '../../hooks/useToast'
 interface Props {
   cashBalances: Record<string, number>
   totalCash: number
+  futuresMargin?: number
   baseCurrency: string
 }
 
-export default function CashPanel({ cashBalances, totalCash, baseCurrency }: Props) {
+export default function CashPanel({ cashBalances, totalCash, futuresMargin, baseCurrency }: Props) {
   const [dialogMode, setDialogMode] = useState<'deposit' | 'withdraw' | null>(null)
   const { showToast } = useToast()
   const depositMut = useDeposit()
@@ -53,6 +54,12 @@ export default function CashPanel({ cashBalances, totalCash, baseCurrency }: Pro
               </span>
             </div>
           ))}
+          {futuresMargin ? (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-t-secondary">期货保证金</span>
+              <span className="font-medium text-amber-500">{formatCurrency(futuresMargin, baseCurrency)}</span>
+            </div>
+          ) : null}
           <div className="border-t border-border-subtle pt-2 flex items-center justify-between text-sm">
             <span className="text-t-muted">折合 {baseCurrency}</span>
             <span className="font-medium text-t-primary">{formatCurrency(totalCash, baseCurrency)}</span>

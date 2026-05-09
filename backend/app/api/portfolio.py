@@ -221,6 +221,17 @@ def get_summary(
         fx = currency_service.get_rate(db, cb.currency, base_currency)
         total_cash += cb.balance * fx
 
+    # Futures margin: sum of margin occupied by futures holdings
+    futures_margin = 0.0
+    for h in holdings:
+        if h.market == "CN_FUTURES" and h.quantity > 0:
+            mult = (getattr(h, 'contract_multiplier', 1.0) or 1.0)
+            margin_rate = (getattr(h, 'margin_rate', 0.0) or 0.0)
+            ratio = (getattr(h, 'holding_ratio', 1.0) or 1.0)
+            margin = h.quantity * h.cost_price * mult * margin_rate * ratio
+            fx = currency_service.get_rate(db, h.currency, base_currency)
+            futures_margin += margin * fx
+
     # Total assets = holdings + cash
     total_assets = total_market_value + total_cash
 
@@ -247,6 +258,7 @@ def get_summary(
         total_gain_loss_pct=total_gain_loss_pct,
         total_realized_pnl=total_realized_pnl,
         total_cash=total_cash,
+        futures_margin=futures_margin,
         cash_balances=cash_balances_map,
         holdings=holding_summaries,
         realized_pnl_details=realized_pnl_details,

@@ -96,9 +96,10 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
     )
     db.add(tx)
 
-    # Deduct cash
+    # Deduct cash (futures don't deduct cash on buy)
     from app.services import cash_service
-    cash_service.on_buy(db, currency.value, trade_amount, account_id)
+    if data.market.value != "CN_FUTURES":
+        cash_service.on_buy(db, currency.value, trade_amount, account_id)
 
     db.commit()
     db.refresh(holding)

@@ -50,6 +50,7 @@ class PortfolioSummary(BaseModel):
     total_gain_loss_pct: float
     total_realized_pnl: float
     total_cash: float
+    futures_margin: float = 0.0
     cash_balances: dict[str, float]
     holdings: list[HoldingSummary]
     realized_pnl_details: list[RealizedPnlItem] = []

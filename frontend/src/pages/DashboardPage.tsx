@@ -138,6 +138,7 @@ export default function DashboardPage() {
           <CashPanel
             cashBalances={summary.cash_balances}
             totalCash={summary.total_cash}
+            futuresMargin={summary.futures_margin}
             baseCurrency={baseCurrency}
           />
         )}

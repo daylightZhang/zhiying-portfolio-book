@@ -44,6 +44,7 @@ export interface PortfolioSummary {
   total_gain_loss_pct: number
   total_realized_pnl: number
   total_cash: number
+  futures_margin: number
   cash_balances: Record<string, number>
   holdings: HoldingSummary[]
   realized_pnl_details: RealizedPnlItem[]
