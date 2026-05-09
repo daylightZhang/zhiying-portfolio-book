@@ -153,6 +153,7 @@ export default function HoldingsPage() {
                 <th className="px-4 py-3 text-right">比例</th>
                 <th className="px-4 py-3 text-right">成本价</th>
                 <th className="px-4 py-3 text-right">现价</th>
+                <th className="px-4 py-3 text-right">市值</th>
                 <th className="px-4 py-3 text-right">盈亏</th>
                 <th className="px-4 py-3 text-right">仓位</th>
                 <th className="px-4 py-3 text-right">操作</th>
@@ -179,6 +180,9 @@ export default function HoldingsPage() {
                     <td className="px-4 py-3 text-right text-t-secondary">{currSymbol}{formatNumber(h.cost_price)}</td>
                     <td className="px-4 py-3 text-right text-t-primary font-medium">
                       {h.current_price !== null ? `${currSymbol}${formatNumber(h.current_price)}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-t-primary">
+                      {(() => { const s = summaryMap.get(h.id); return s ? formatNumber(s.market_value_base) : '—' })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {(() => { const s = summaryMap.get(h.id); return s ? <GainLossText value={s.gain_loss} percent={s.gain_loss_pct} size="sm" showIcon={false} /> : '—' })()}
