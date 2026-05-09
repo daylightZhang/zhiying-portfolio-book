@@ -86,7 +86,7 @@ export default function Sidebar({ theme, onThemeChange, onOpenSettings, collapse
     <aside className={`group/sidebar fixed left-0 top-0 z-40 flex h-full flex-col border-r border-border bg-bg-card/80 glass transition-all duration-300 ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Header */}
       <div className={`flex items-center justify-center py-5 ${collapsed ? 'px-2' : 'px-5'}`}>
-        <img src={theme === 'aurora' || theme === 'jade' ? '/logo_light.png' : '/logo.png'} alt="知盈" className={`rounded-lg shrink-0 ${collapsed ? 'h-10 w-10' : 'h-20 w-20'}`} />
+        <img src={theme === 'aurora' || theme === 'jade' ? '/logo_light.png' : '/logo.png'} alt="知盈" className={`rounded-lg shrink-0 ${collapsed ? 'h-11 w-11' : 'h-28 w-28'}`} />
       </div>
 
       {/* Account Selector */}
