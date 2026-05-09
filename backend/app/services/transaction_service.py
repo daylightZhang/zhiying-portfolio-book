@@ -59,7 +59,12 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
         raise HTTPException(status_code=400, detail="无法对关联持仓进行交易操作")
 
     multiplier = holding.contract_multiplier or 1.0
-    trade_amount = data.quantity * data.price * multiplier
+    if holding.market == "CN_FUTURES":
+        margin_rate = holding.margin_rate or 0.12
+        ratio = holding.holding_ratio or 1.0
+        trade_amount = data.quantity * data.price * multiplier * margin_rate * ratio
+    else:
+        trade_amount = data.quantity * data.price * multiplier
 
     tx = Transaction(
         account_id=account_id,
@@ -138,7 +143,11 @@ def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
         if holding:
             holding.quantity = max(0, holding.quantity - tx.quantity)
             multiplier = holding.contract_multiplier or 1.0
-            cash_service.on_sell(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+            if holding.market == "CN_FUTURES":
+                cash_amt = tx.quantity * tx.price * multiplier * (holding.margin_rate or 0.12) * (holding.holding_ratio or 1.0)
+            else:
+                cash_amt = tx.quantity * tx.price * multiplier
+            cash_service.on_sell(db, holding.currency, cash_amt, account_id)
             holding.updated_at = now
 
     elif tx.type == "SELL" and tx.holding_id:
@@ -146,7 +155,11 @@ def delete_transaction(db: Session, tx_id: int, account_id: int = 1) -> bool:
         if holding:
             holding.quantity = holding.quantity + tx.quantity
             multiplier = holding.contract_multiplier or 1.0
-            cash_service.on_buy(db, holding.currency, tx.quantity * tx.price * multiplier, account_id)
+            if holding.market == "CN_FUTURES":
+                cash_amt = tx.quantity * tx.price * multiplier * (holding.margin_rate or 0.12) * (holding.holding_ratio or 1.0)
+            else:
+                cash_amt = tx.quantity * tx.price * multiplier
+            cash_service.on_buy(db, holding.currency, cash_amt, account_id)
             holding.updated_at = now
 
     elif tx.type == "ADJUST" and tx.holding_id:

@@ -77,7 +77,12 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
     db.flush()
 
     multiplier = data.contract_multiplier or 1.0
-    trade_amount = data.quantity * data.cost_price * multiplier
+    if data.market.value == "CN_FUTURES":
+        margin_rate = data.margin_rate or 0.12
+        ratio = data.holding_ratio or 1.0
+        trade_amount = data.quantity * data.cost_price * multiplier * margin_rate * ratio
+    else:
+        trade_amount = data.quantity * data.cost_price * multiplier
 
     tx = Transaction(
         account_id=account_id,
