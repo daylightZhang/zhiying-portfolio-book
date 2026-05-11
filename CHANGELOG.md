@@ -1,5 +1,15 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-11 v1.11.1 - Google Finance 盘前盘后价格
+
+### 优化
+- **Google Finance 数据源**: 支持提取美股盘前/盘后价格 (pre-market / after-hours)
+  - 解析 AF_initDataCallback 结构化数据，优先返回 extended-hours 价格
+  - 修复 Google Finance 重定向到 `/finance/beta/` 后无法获取价格的问题
+  - 增加 `follow_redirects=True` 和多层解析回退 (inner quote → ds:6 → data-last-price)
+
+---
+
 ## 2026-05-06 v1.11.0 - 美股IPO监测 + 上市提醒
 
 ### 新增

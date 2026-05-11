@@ -475,12 +475,81 @@ def get_market_indices() -> list[dict]:
     return results
 
 
+def _google_finance_extract_price(html: str, symbol: str) -> float | None:
+    """Extract best price from Google Finance HTML (supports pre/post-market for US stocks).
+
+    Google Finance embeds quote data in AF_initDataCallback JS blocks.
+    - ds:6 block has the main quote: [[[[null,["SYM","EXCH"]],null,open,mid,low,high,close,...]]
+      close price is at outer[0][0][6].
+    - Inner quote objects (entity ID "/m/..." or "/g/..."): index [5] = regular price,
+      index [16] = extended-hours price (pre/post market).
+    """
+    import re, json
+    blocks = re.findall(
+        r'AF_initDataCallback\(\{key:\s*\'(ds:\d+)\',\s*hash:\s*\'\d+\',\s*data:(.*?),\s*sideChannel:',
+        html, re.DOTALL,
+    )
+    bare = symbol.split(":")[0] if ":" in symbol else symbol
+
+    # --- Method 1: Inner quote objects with extended-hours support ---
+    for _key, data in blocks:
+        if f'"{bare}"' not in data:
+            continue
+        # Entity IDs can be "/m/..." or "/g/..." depending on market
+        pattern = rf'\["/[mg]/[^"]+",\["{re.escape(bare)}",'
+        for m in re.finditer(pattern, data):
+            start = m.start()
+            depth, i = 0, start
+            while i < len(data):
+                if data[i] == '[':
+                    depth += 1
+                elif data[i] == ']':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                i += 1
+            arr_str = data[start:i + 1]
+            try:
+                arr = json.loads(arr_str)
+            except Exception:
+                continue
+            if not isinstance(arr, list) or len(arr) < 6:
+                continue
+            regular = arr[5] if len(arr) > 5 and isinstance(arr[5], list) else None
+            extended = arr[16] if len(arr) > 16 and isinstance(arr[16], list) else None
+            if extended and len(extended) > 0 and isinstance(extended[0], (int, float)):
+                return float(extended[0])
+            if regular and len(regular) > 0 and isinstance(regular[0], (int, float)):
+                return float(regular[0])
+
+    # --- Method 2: ds:6 block — [[[[null,["SYM","EXCH"]],null,open,mid,low,high,CLOSE,...]]] ---
+    for key, data in blocks:
+        if key != 'ds:6' or f'"{bare}"' not in data:
+            continue
+        try:
+            parsed = json.loads(data)
+            row = parsed[0][0]  # outer wrapper
+            if isinstance(row[0], list) and isinstance(row[0][1], list) and row[0][1][0] == bare:
+                price = row[6]  # close / current price
+                if isinstance(price, (int, float)):
+                    return float(price)
+        except Exception:
+            pass
+
+    # --- Fallback: data-last-price attribute ---
+    m = re.search(r'data-last-price="([0-9.]+)"', html)
+    if m:
+        return float(m.group(1))
+    return None
+
+
 def _google_finance_price(symbol: str) -> float | None:
-    """Get price from Google Finance by scraping data-last-price attribute."""
-    import httpx, re
+    """Get best available price from Google Finance (supports pre/post-market)."""
+    import httpx
     EXCHANGE_MAP = {
         ".ST": ":STO", ".PA": ":EPA", ".DE": ":ETR", ".HK": ":HKG",
     }
+    _HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
     gf_symbol = None
     for suffix, exchange in EXCHANGE_MAP.items():
         if symbol.endswith(suffix):
@@ -491,26 +560,22 @@ def _google_finance_price(symbol: str) -> float | None:
         for exchange in ["NASDAQ", "NYSE", "NYSEARCA"]:
             try:
                 resp = httpx.get(
-                    f"https://www.google.com/finance/quote/{symbol}:{exchange}?hl=zh",
-                    timeout=8,
-                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                    f"https://www.google.com/finance/quote/{symbol}:{exchange}",
+                    timeout=8, headers=_HEADERS, follow_redirects=True,
                 )
                 if resp.status_code == 200:
-                    m = re.search(r'data-last-price="([0-9.]+)"', resp.text)
-                    if m:
-                        return float(m.group(1))
+                    price = _google_finance_extract_price(resp.text, symbol)
+                    if price:
+                        return price
             except Exception:
                 continue
         return None
     resp = httpx.get(
-        f"https://www.google.com/finance/quote/{gf_symbol}?hl=zh",
-        timeout=8,
-        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+        f"https://www.google.com/finance/quote/{gf_symbol}",
+        timeout=8, headers=_HEADERS, follow_redirects=True,
     )
     if resp.status_code == 200:
-        m = re.search(r'data-last-price="([0-9.]+)"', resp.text)
-        if m:
-            return float(m.group(1))
+        return _google_finance_extract_price(resp.text, gf_symbol.split(":")[0])
     return None
 
 
