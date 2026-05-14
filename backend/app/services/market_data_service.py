@@ -447,7 +447,7 @@ MARKET_INDICES = [
 # In-memory cache for indices
 _indices_cache: list[dict] = []
 _indices_cache_time: datetime | None = None
-_INDICES_CACHE_TTL = timedelta(minutes=10)
+_INDICES_CACHE_TTL = timedelta(minutes=5)
 
 
 def get_market_indices() -> list[dict]:
