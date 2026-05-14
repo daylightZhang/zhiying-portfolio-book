@@ -6,7 +6,29 @@
 
 每次完成修改后，必须执行以下步骤：
 1. 将改动记录到 `CHANGELOG.md`（版本号递增，描述新增/修改/修复内容）
-2. 提交 git commit（commit message 包含版本号和改动摘要）
+2. 提交 git commit（commit message 使用 gitmoji 前缀 + 改动摘要）
+
+### Git Commit 规范
+
+commit message 必须使用 gitmoji 前缀表示修改类型：
+
+| Emoji | 含义 | 场景 |
+|-------|------|------|
+| ✨ | 新功能 | feat |
+| 🐛 | 修复 bug | fix |
+| 🔧 | 配置/工具变更 | chore |
+| ♻️ | 重构 | refactor |
+| 💄 | UI/样式变更 | style |
+| 🗃️ | 数据库相关 | db |
+| ⚡ | 性能优化 | perf |
+| 📝 | 文档 | docs |
+| 🔥 | 删除代码/文件 | remove |
+| 🚀 | 部署 | deploy |
+| ✅ | 测试 | test |
+| 🏷️ | 类型定义 | types |
+| 🍱 | 资源文件 | assets |
+
+示例：`✨ 新增美股IPO监测页面` `🐛 修复期货现金计算逻辑`
 
 ## 技术栈
 
