@@ -18,7 +18,7 @@ export function useMarketIndices() {
   return useQuery({
     queryKey: ['market-indices'],
     queryFn: fetchIndices,
-    refetchInterval: 30 * 60 * 1000,
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
   })
 }
