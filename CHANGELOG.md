@@ -1,5 +1,14 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-28 v1.11.2 - 修复关联持仓下拉框缓存
+
+### 修复
+- **关联券商持仓下拉框**: 在共同账户/券商账户新增持仓后，建仓时关联下拉框看不到新持仓
+  - 根因: `useCreateHolding` / `useUpdateHolding` / `useDeleteHolding` 仅 invalidate `['holdings']` 和 `['portfolio']`，未 invalidate `['broker-positions']`，叠加 5 分钟 staleTime 导致下拉数据陈旧
+  - 修复: 三个 mutation 在 onSuccess 中追加 invalidate `['broker-positions']`
+
+---
+
 ## 2026-05-11 v1.11.1 - Google Finance 盘前盘后价格
 
 ### 优化

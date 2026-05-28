@@ -19,6 +19,7 @@ export function useCreateHolding() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['holdings'] })
       qc.invalidateQueries({ queryKey: ['portfolio'] })
+      qc.invalidateQueries({ queryKey: ['broker-positions'] })
     },
   })
 }
@@ -30,6 +31,7 @@ export function useUpdateHolding() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['holdings'] })
       qc.invalidateQueries({ queryKey: ['portfolio'] })
+      qc.invalidateQueries({ queryKey: ['broker-positions'] })
     },
   })
 }
@@ -41,6 +43,7 @@ export function useDeleteHolding() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['holdings'] })
       qc.invalidateQueries({ queryKey: ['portfolio'] })
+      qc.invalidateQueries({ queryKey: ['broker-positions'] })
     },
   })
 }
