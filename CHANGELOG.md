@@ -1,5 +1,15 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-29 v1.11.8 - 已实现盈亏切换区间后保持底部可见
+
+### 修复
+- 切换"今年/去年/自定义"等预设导致页面高度变化，原本在底部浏览的滚动位置丢失
+- 在 DashboardPage 加 `realizedSectionRef` + `pendingRealizedScrollRef` 标记
+- 切换区间触发 `setRealizedRange` 时打标，待新数据到达后用 `scrollIntoView({ block: 'end', behavior: 'smooth' })` 把区段底部滚回视口
+- 空态 padding 加大，减小切换时的高度落差
+
+---
+
 ## 2026-05-29 v1.11.7 - 一键部署/启动/停止脚本
 
 ### 新增
