@@ -18,7 +18,7 @@ export function formatPercent(value: number): string {
 }
 
 export function formatDate(dateStr: string): string {
-  // Backend stores Beijing time directly, parse and format without timezone conversion
+  // Backend serializes datetimes with +08:00 offset; new Date() converts to browser local time automatically.
   const d = new Date(dateStr)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')

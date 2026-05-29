@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel
 
-from app.utils.ticker import Market, Currency
+from app.utils.ticker import Market, Currency, BeijingDateTime
 
 
 class HoldingCreate(BaseModel):
@@ -44,12 +44,12 @@ class HoldingResponse(BaseModel):
     margin_rate: float
     currency: str
     current_price: float | None
-    price_updated_at: datetime | None
+    price_updated_at: BeijingDateTime | None
     linked_broker_holding_id: int | None = None
     broker_account_name: str | None = None
     broker_holding_symbol: str | None = None
     notes: str | None
-    created_at: datetime
-    updated_at: datetime
+    created_at: BeijingDateTime
+    updated_at: BeijingDateTime
 
     model_config = {"from_attributes": True}

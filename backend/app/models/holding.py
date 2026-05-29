@@ -1,8 +1,9 @@
 from datetime import datetime
-from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey, func
+from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.ticker import now_beijing
 
 
 class Holding(Base):
@@ -24,8 +25,8 @@ class Holding(Base):
     margin_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0.0")
     linked_broker_holding_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=now_beijing)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=now_beijing, onupdate=now_beijing)
 
     transactions: Mapped[list["Transaction"]] = relationship(  # noqa: F821
         back_populates="holding", cascade="all, delete-orphan", order_by="Transaction.transacted_at.desc()"

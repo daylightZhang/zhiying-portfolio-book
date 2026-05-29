@@ -1,8 +1,9 @@
 from datetime import datetime
-from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey, func
+from sqlalchemy import String, Float, DateTime, Text, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.ticker import now_beijing
 
 
 class Transaction(Base):
@@ -18,6 +19,6 @@ class Transaction(Base):
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     transacted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=now_beijing)
 
     holding: Mapped["Holding | None"] = relationship(back_populates="transactions")  # noqa: F821

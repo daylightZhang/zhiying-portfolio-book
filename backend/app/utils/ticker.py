@@ -1,5 +1,8 @@
 import enum
 from datetime import datetime, timezone, timedelta
+from typing import Annotated
+
+from pydantic import PlainSerializer
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 
@@ -7,6 +10,23 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 def now_beijing() -> datetime:
     """Return current time in Beijing timezone (UTC+8), without tzinfo for SQLite compatibility."""
     return datetime.now(BEIJING_TZ).replace(tzinfo=None)
+
+
+def _serialize_with_beijing_offset(dt: datetime) -> str:
+    """Tag naive datetimes (assumed Beijing) with +08:00 so clients can convert to local time.
+    Tz-aware datetimes are emitted with their original offset."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=BEIJING_TZ)
+    return dt.isoformat()
+
+
+# Use this in response schemas instead of bare `datetime`.
+# Stored values are naive Beijing time; on JSON output they get tagged with +08:00,
+# so the frontend's `new Date(...)` parses them as a real instant and renders in the user's local timezone.
+BeijingDateTime = Annotated[
+    datetime,
+    PlainSerializer(_serialize_with_beijing_offset, return_type=str, when_used="json"),
+]
 
 
 class Market(str, enum.Enum):

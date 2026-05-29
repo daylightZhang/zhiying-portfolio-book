@@ -2,6 +2,8 @@ from datetime import datetime
 from pydantic import BaseModel
 import enum
 
+from app.utils.ticker import BeijingDateTime
+
 
 class TransactionType(str, enum.Enum):
     BUY = "BUY"
@@ -30,8 +32,8 @@ class TransactionResponse(BaseModel):
     total_amount: float
     currency: str | None = None
     notes: str | None
-    transacted_at: datetime
-    created_at: datetime
+    transacted_at: BeijingDateTime
+    created_at: BeijingDateTime
     holding_name: str | None = None
     holding_symbol: str | None = None
 

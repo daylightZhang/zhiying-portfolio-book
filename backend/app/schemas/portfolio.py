@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel
 
-from app.utils.ticker import Market, Currency
+from app.utils.ticker import Market, Currency, BeijingDateTime
 
 
 class HoldingSummary(BaseModel):
@@ -22,7 +22,7 @@ class HoldingSummary(BaseModel):
     gain_loss: float
     gain_loss_pct: float
     weight_pct: float
-    price_updated_at: datetime | None
+    price_updated_at: BeijingDateTime | None
     linked_broker_holding_id: int | None = None
     broker_account_name: str | None = None
 
@@ -57,13 +57,13 @@ class PortfolioSummary(BaseModel):
     by_market: dict[str, MarketBreakdown]
     by_currency: dict[str, MarketBreakdown]
     exchange_rates: dict[str, float]
-    last_refreshed: datetime | None
+    last_refreshed: BeijingDateTime | None
 
 
 class ExchangeRateResponse(BaseModel):
     from_currency: str
     to_currency: str
     rate: float
-    updated_at: datetime
+    updated_at: BeijingDateTime
 
     model_config = {"from_attributes": True}

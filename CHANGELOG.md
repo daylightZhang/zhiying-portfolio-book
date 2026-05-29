@@ -1,5 +1,16 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-29 v1.11.4 - 时间显示按浏览器所在地
+
+### 优化
+- **时间序列化**: 后端响应的 datetime 字段统一附带 `+08:00` 偏移
+  - 新增 `BeijingDateTime` 注解类型 (Pydantic `PlainSerializer`)，把库里裸 datetime 标记为北京时间
+  - 替换响应 schema 中的 `datetime`：holdings / transactions / portfolio / cash / accounts
+  - 前端 `new Date()` 自动按浏览器所在地时区渲染（在瑞典就显示瑞典时间，回北京就显示北京时间）
+- **模型 default 统一**: 把模型里 `server_default=func.now()`（SQLite 实际是 UTC，会被误标）替换为 Python 端 `default=now_beijing`，避免 created_at 标记错误偏 8 小时
+
+---
+
 ## 2026-05-29 v1.11.3 - 关联券商持仓下拉框美化
 
 ### 优化

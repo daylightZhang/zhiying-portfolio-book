@@ -1,5 +1,6 @@
-from datetime import datetime
 from pydantic import BaseModel
+
+from app.utils.ticker import BeijingDateTime
 
 
 class AccountCreate(BaseModel):
@@ -15,7 +16,7 @@ class AccountResponse(BaseModel):
     id: int
     name: str
     type: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: BeijingDateTime
+    updated_at: BeijingDateTime
 
     model_config = {"from_attributes": True}
