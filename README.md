@@ -44,13 +44,22 @@
 - Python 3.11+
 - Node.js 18+
 
-### 安装与启动
+### 一键安装与启动 (推荐)
 
 ```bash
-# 克隆项目
 git clone <repo-url> zhiying-portfolio-book
 cd zhiying-portfolio-book
 
+./setup.sh   # 首次部署：创建 venv、安装依赖、下载 playwright 浏览器
+./start.sh   # 启动前后端 (Ctrl+C 即可停止)
+./stop.sh    # 停止前后端
+```
+
+数据库表会在首次启动时自动创建。日志输出在 `.logs/{backend,frontend}.log`。
+
+### 手动启动
+
+```bash
 # 后端
 cd backend
 python3 -m venv .venv
@@ -114,8 +123,11 @@ npm run dev
 ```
 zhiying-portfolio-book/
 ├── logo.png
+├── setup.sh                        # 一键环境部署脚本
 ├── start.sh                        # 一键启动脚本
+├── stop.sh                         # 一键停止脚本
 ├── data/                           # SQLite 数据库 (gitignored)
+├── .logs/                          # 启动日志 (gitignored)
 │
 ├── backend/
 │   ├── requirements.txt

@@ -1,5 +1,23 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-29 v1.11.7 - 一键部署/启动/停止脚本
+
+### 新增
+- **`setup.sh`**: 一键环境部署
+  - 检查 Python ≥ 3.10、Node、npm
+  - 创建后端 venv、安装 `requirements.txt`、下载 playwright chromium
+  - 安装前端依赖（优先 `npm ci`）
+  - 创建 `data/` 目录（首次启动自动建表）
+- **`start.sh`**: 一键启动前后端
+  - 先校验 venv / node_modules 是否就绪
+  - 8000/5173 占用清理后启动；输出端口、PID、文档地址
+  - 日志写入 `.logs/{backend,frontend}.log`，前台 tail 展示
+  - Ctrl+C 触发 stop.sh 自动清理
+- **`stop.sh`**: 一键停止；通过 PID 文件优雅 kill，再兜底清理 8000/5173 端口
+- **README**: 同步一键脚本使用说明
+
+---
+
 ## 2026-05-29 v1.11.6 - 建仓自动拉取行情
 
 ### 优化
