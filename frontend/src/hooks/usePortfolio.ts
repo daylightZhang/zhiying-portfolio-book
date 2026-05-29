@@ -15,11 +15,11 @@ export function useBaseCurrency() {
   return [currency, setCurrency] as const
 }
 
-export function usePortfolioSummary(baseCurrency: string) {
+export function usePortfolioSummary(baseCurrency: string, realizedStart?: string, realizedEnd?: string) {
   const { accountId } = useCurrentAccount()
   return useQuery({
-    queryKey: ['portfolio', 'summary', accountId, baseCurrency],
-    queryFn: () => portfolioApi.getPortfolioSummary(baseCurrency, accountId),
+    queryKey: ['portfolio', 'summary', accountId, baseCurrency, realizedStart || '', realizedEnd || ''],
+    queryFn: () => portfolioApi.getPortfolioSummary(baseCurrency, accountId, realizedStart, realizedEnd),
     refetchInterval: 5000,
   })
 }

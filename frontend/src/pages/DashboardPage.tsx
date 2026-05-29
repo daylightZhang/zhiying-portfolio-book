@@ -6,6 +6,7 @@ import CurrencySelector from '../components/dashboard/CurrencySelector'
 import PortfolioSummaryCard from '../components/dashboard/PortfolioSummaryCard'
 import HoldingsTable from '../components/dashboard/HoldingsTable'
 import RealizedPnlTable from '../components/dashboard/RealizedPnlTable'
+import RealizedPnlRangeFilter, { getThisYearRange, type DateRange } from '../components/dashboard/RealizedPnlRangeFilter'
 import MarketBreakdownChart from '../components/dashboard/MarketBreakdownChart'
 import CashPanel from '../components/dashboard/CashPanel'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -17,7 +18,8 @@ const REFRESH_INTERVAL = 5 * 60
 
 export default function DashboardPage() {
   const [baseCurrency, setBaseCurrency] = useBaseCurrency()
-  const { data: summary, isLoading } = usePortfolioSummary(baseCurrency)
+  const [realizedRange, setRealizedRange] = useState<DateRange>(getThisYearRange)
+  const { data: summary, isLoading } = usePortfolioSummary(baseCurrency, realizedRange.start, realizedRange.end)
   const refreshPrices = useRefreshPrices()
   const refreshRates = useRefreshExchangeRates()
   const navigate = useNavigate()
@@ -155,10 +157,19 @@ export default function DashboardPage() {
       )}
 
       {/* Realized P&L Table */}
-      {summary && summary.realized_pnl_details.length > 0 && (
+      {summary && (
         <div>
-          <h3 className="text-sm font-medium text-t-muted mb-3">已实现盈亏</h3>
-          <RealizedPnlTable items={summary.realized_pnl_details} currency={baseCurrency} />
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-t-muted">已实现盈亏</h3>
+            <RealizedPnlRangeFilter value={realizedRange} onChange={setRealizedRange} />
+          </div>
+          {summary.realized_pnl_details.length > 0 ? (
+            <RealizedPnlTable items={summary.realized_pnl_details} currency={baseCurrency} />
+          ) : (
+            <div className="rounded-xl border border-border-subtle bg-bg-card/40 px-4 py-10 text-center text-sm text-t-faint">
+              当前区间内无已实现盈亏
+            </div>
+          )}
         </div>
       )}
     </div>

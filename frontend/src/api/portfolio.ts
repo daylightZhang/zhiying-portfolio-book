@@ -1,10 +1,16 @@
 import client from './client'
 import type { PortfolioSummary } from '../types/portfolio'
 
-export async function getPortfolioSummary(baseCurrency: string, accountId: number = 1): Promise<PortfolioSummary> {
-  const { data } = await client.get('/portfolio/summary', {
-    params: { base_currency: baseCurrency, account_id: accountId },
-  })
+export async function getPortfolioSummary(
+  baseCurrency: string,
+  accountId: number = 1,
+  realizedStart?: string,
+  realizedEnd?: string,
+): Promise<PortfolioSummary> {
+  const params: Record<string, unknown> = { base_currency: baseCurrency, account_id: accountId }
+  if (realizedStart) params.realized_start = realizedStart
+  if (realizedEnd) params.realized_end = realizedEnd
+  const { data } = await client.get('/portfolio/summary', { params })
   return data
 }
 

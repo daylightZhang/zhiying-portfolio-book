@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -13,12 +14,37 @@ from app.utils.ticker import MARKET_LABELS
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
+def _parse_date(s: str | None) -> datetime | None:
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _in_realized_range(tx_dt: datetime | None, start: datetime | None, end_exclusive: datetime | None) -> bool:
+    """Whether a SELL transaction should be counted toward realized P&L given the filter."""
+    if tx_dt is None:
+        return start is None and end_exclusive is None
+    if start is not None and tx_dt < start:
+        return False
+    if end_exclusive is not None and tx_dt >= end_exclusive:
+        return False
+    return True
+
+
 @router.get("/summary", response_model=PortfolioSummary)
 def get_summary(
     base_currency: str = Query(default="CNY"),
     account_id: int = Query(default=1),
+    realized_start: str | None = Query(default=None, description="Filter realized P&L from this date (YYYY-MM-DD, inclusive)"),
+    realized_end: str | None = Query(default=None, description="Filter realized P&L to this date (YYYY-MM-DD, inclusive)"),
     db: Session = Depends(get_db),
 ):
+    realized_start_dt = _parse_date(realized_start)
+    realized_end_dt = _parse_date(realized_end)
+    realized_end_exclusive = (realized_end_dt + timedelta(days=1)) if realized_end_dt else None
     holdings = holding_service.get_all_holdings(db, account_id=account_id)
 
     # Load prices from market_quotes table
@@ -140,7 +166,8 @@ def get_summary(
                     running_cost = (running_qty * running_cost + tx.quantity * tx.price) / (running_qty + tx.quantity)
                 running_qty += tx.quantity
             elif tx.type == "SELL":
-                realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
+                if _in_realized_range(tx.transacted_at, realized_start_dt, realized_end_exclusive):
+                    realized_native += (tx.price - running_cost) * tx.quantity * multiplier * ratio
                 running_qty = max(0, running_qty - tx.quantity)
             elif tx.type == "ADJUST":
                 seeded = True
@@ -192,7 +219,8 @@ def get_summary(
                     b_running_cost = (b_running_qty * b_running_cost + tx.quantity * tx.price) / (b_running_qty + tx.quantity)
                 b_running_qty += tx.quantity
             elif tx.type == "SELL":
-                b_realized += (tx.price - b_running_cost) * tx.quantity * b_multiplier
+                if _in_realized_range(tx.transacted_at, realized_start_dt, realized_end_exclusive):
+                    b_realized += (tx.price - b_running_cost) * tx.quantity * b_multiplier
                 b_running_qty = max(0, b_running_qty - tx.quantity)
             elif tx.type == "ADJUST":
                 b_seeded = True
