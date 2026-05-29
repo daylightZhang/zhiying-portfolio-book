@@ -1,11 +1,11 @@
 from datetime import datetime
-from app.utils.ticker import now_beijing
+from app.utils.ticker import now_beijing, to_beijing_naive
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.models.holding import Holding
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionCreate
+from app.schemas.transaction import TransactionCreate, TransactionUpdate
 from app.services import cash_service
 
 
@@ -75,7 +75,7 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
         total_amount=trade_amount,
         currency=holding.currency,
         notes=data.notes,
-        transacted_at=data.transacted_at or now_beijing(),
+        transacted_at=to_beijing_naive(data.transacted_at) or now_beijing(),
     )
     db.add(tx)
 
@@ -134,6 +134,39 @@ def create_transaction(db: Session, data: TransactionCreate, account_id: int = 1
                         currency=holding.currency, transacted_at=now,
                         notes=f"关联卖出 {holding.symbol} ({data.quantity}股×{data.price}×{lh.holding_ratio:.2%})",
                     ))
+
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+def update_transaction(db: Session, tx_id: int, data: TransactionUpdate, account_id: int = 1) -> Transaction | None:
+    """Update editable fields of a transaction.
+    Currently allowed: transacted_at, notes. Quantity/price/cash effects are NOT touched —
+    if those need to change, delete and re-create the transaction."""
+    tx = db.get(Transaction, tx_id)
+    if not tx or tx.account_id != account_id:
+        return None
+
+    if data.transacted_at is not None:
+        new_dt = to_beijing_naive(data.transacted_at)
+        if new_dt is not None:
+            tx.transacted_at = new_dt
+    if data.notes is not None:
+        tx.notes = data.notes.strip() or None
+
+    db.flush()
+
+    # Reordering BUYs (and indirectly SELLs that reference cost basis) may shift weighted-average cost.
+    if tx.holding_id and tx.type in ("BUY", "SELL", "ADJUST"):
+        holding = db.get(Holding, tx.holding_id)
+        if holding:
+            _recalc_cost(db, holding)
+            from app.models.account import Account
+            from app.services.holding_service import sync_linked_holdings
+            acct = db.get(Account, account_id)
+            if acct and acct.type == "broker":
+                sync_linked_holdings(db, holding.id)
 
     db.commit()
     db.refresh(tx)

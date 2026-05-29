@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
-import type { Transaction } from '../../types/transaction'
+import { Trash2, Pencil } from 'lucide-react'
+import type { Transaction, TransactionUpdate } from '../../types/transaction'
 import { formatNumber, formatDateTime } from '../../utils/format'
 import ConfirmDialog from '../common/ConfirmDialog'
+import EditTransactionDialog from './EditTransactionDialog'
 
 const TYPE_STYLES: Record<string, string> = {
   BUY: 'bg-blue-500/20 text-blue-600',
@@ -23,10 +24,13 @@ const TYPE_LABELS: Record<string, string> = {
 interface Props {
   transactions: Transaction[]
   onDelete?: (txId: number) => void
+  onUpdate?: (txId: number, data: TransactionUpdate) => void
 }
 
-export default function TransactionList({ transactions, onDelete }: Props) {
+export default function TransactionList({ transactions, onDelete, onUpdate }: Props) {
   const [confirmId, setConfirmId] = useState<number | null>(null)
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const hasActions = !!onDelete || !!onUpdate
 
   return (
     <>
@@ -41,7 +45,7 @@ export default function TransactionList({ transactions, onDelete }: Props) {
               <th className="px-4 py-3 text-right">价格</th>
               <th className="px-4 py-3 text-right">金额</th>
               <th className="px-4 py-3">备注</th>
-              {onDelete && <th className="px-4 py-3 text-right">操作</th>}
+              {hasActions && <th className="px-4 py-3 text-right">操作</th>}
             </tr>
           </thead>
           <tbody>
@@ -61,16 +65,28 @@ export default function TransactionList({ transactions, onDelete }: Props) {
                 <td className="px-4 py-3 text-right text-t-secondary">{formatNumber(tx.price)}</td>
                 <td className="px-4 py-3 text-right text-t-primary">{formatNumber(tx.total_amount)}</td>
                 <td className="px-4 py-3 text-t-faint max-w-[150px] truncate">{tx.notes || '—'}</td>
-                {onDelete && (
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setConfirmId(tx.id)}
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-t-muted hover:text-loss hover:bg-loss/10 transition-all"
-                      title="删除此记录"
-                    >
-                      <Trash2 size={13} />
-                      删除
-                    </button>
+                {hasActions && (
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {onUpdate && (
+                      <button
+                        onClick={() => setEditingTx(tx)}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-t-muted hover:text-accent hover:bg-accent-bg transition-all mr-1"
+                        title="修改时间"
+                      >
+                        <Pencil size={13} />
+                        修改
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        onClick={() => setConfirmId(tx.id)}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-t-muted hover:text-loss hover:bg-loss/10 transition-all"
+                        title="删除此记录"
+                      >
+                        <Trash2 size={13} />
+                        删除
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>
@@ -85,6 +101,13 @@ export default function TransactionList({ transactions, onDelete }: Props) {
         message="删除后将还原该交易对持仓和现金的影响，此操作不可恢复。"
         onConfirm={() => { if (confirmId !== null) { onDelete?.(confirmId); setConfirmId(null) } }}
         onCancel={() => setConfirmId(null)}
+      />
+
+      <EditTransactionDialog
+        open={editingTx !== null}
+        tx={editingTx}
+        onClose={() => setEditingTx(null)}
+        onSubmit={(data) => { if (editingTx) onUpdate?.(editingTx.id, data) }}
       />
     </>
   )

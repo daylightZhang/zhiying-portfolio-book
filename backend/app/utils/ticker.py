@@ -20,6 +20,16 @@ def _serialize_with_beijing_offset(dt: datetime) -> str:
     return dt.isoformat()
 
 
+def to_beijing_naive(dt: datetime | None) -> datetime | None:
+    """Convert any incoming datetime (tz-aware or naive) into a naive Beijing datetime suitable for DB storage.
+    Naive datetimes are assumed to already be Beijing-local."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(BEIJING_TZ).replace(tzinfo=None)
+
+
 # Use this in response schemas instead of bare `datetime`.
 # Stored values are naive Beijing time; on JSON output they get tagged with +08:00,
 # so the frontend's `new Date(...)` parses them as a real instant and renders in the user's local timezone.

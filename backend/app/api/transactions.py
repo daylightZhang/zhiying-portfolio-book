@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.transaction import TransactionCreate, TransactionResponse
+from app.schemas.transaction import TransactionCreate, TransactionResponse, TransactionUpdate
 from app.services import transaction_service
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -36,6 +36,21 @@ def list_transactions(
     response = JSONResponse(content=[r.model_dump(mode="json") for r in result])
     response.headers["X-Total-Count"] = str(total)
     return response
+
+
+@router.put("/{tx_id}", response_model=TransactionResponse)
+def update_transaction(tx_id: int, data: TransactionUpdate, account_id: int = Query(default=1), db: Session = Depends(get_db)):
+    tx = transaction_service.update_transaction(db, tx_id, data, account_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    resp = TransactionResponse.model_validate(tx)
+    if tx.holding:
+        resp.holding_name = tx.holding.name
+        resp.holding_symbol = tx.holding.symbol
+    elif tx.type in ("DEPOSIT", "WITHDRAW"):
+        resp.holding_name = "现金"
+        resp.holding_symbol = tx.currency or ""
+    return resp
 
 
 @router.delete("/{tx_id}")

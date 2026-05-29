@@ -1,5 +1,5 @@
 import client from './client'
-import type { Transaction, TransactionCreate } from '../types/transaction'
+import type { Transaction, TransactionCreate, TransactionUpdate } from '../types/transaction'
 
 export interface TransactionPage {
   items: Transaction[]
@@ -24,6 +24,11 @@ export async function getTransactions(params?: {
 
 export async function createTransaction(payload: TransactionCreate, accountId: number = 1): Promise<Transaction> {
   const { data } = await client.post('/transactions', payload, { params: { account_id: accountId } })
+  return data
+}
+
+export async function updateTransaction(txId: number, payload: TransactionUpdate, accountId: number = 1): Promise<Transaction> {
+  const { data } = await client.put(`/transactions/${txId}`, payload, { params: { account_id: accountId } })
   return data
 }
 

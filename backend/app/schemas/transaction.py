@@ -23,6 +23,11 @@ class TransactionCreate(BaseModel):
     transacted_at: datetime | None = None
 
 
+class TransactionUpdate(BaseModel):
+    transacted_at: datetime | None = None
+    notes: str | None = None
+
+
 class TransactionResponse(BaseModel):
     id: int
     holding_id: int | None

@@ -1,5 +1,16 @@
 # 知盈 (ZhiYing) 变更记录
 
+## 2026-05-29 v1.11.9 - 交易记录支持修改实际时间
+
+### 新增
+- **修改交易时间**: 交易记录列表新增"修改"按钮，可调整 `transacted_at` 与备注
+  - 后端 `PUT /transactions/{tx_id}` (新 schema `TransactionUpdate`)，仅修改时间和备注；数量/价格如错误请删除后重建
+  - 修改时间会触发 `_recalc_cost` 重算持仓加权平均成本（BUY 顺序变化会影响成本基准）；券商账户同步关联持仓
+  - 入参支持任意时区的 ISO 8601；统一通过 `to_beijing_naive()` 转 Beijing 后入库
+  - 前端用 `<input type="datetime-local">` 按浏览器本地时区输入；保存时转 UTC ISO 提交
+
+---
+
 ## 2026-05-29 v1.11.8 - 已实现盈亏切换区间后保持底部可见
 
 ### 修复

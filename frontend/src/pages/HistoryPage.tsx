@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useTransactions, useDeleteTransaction } from '../hooks/useTransactions'
+import { useTransactions, useDeleteTransaction, useUpdateTransaction } from '../hooks/useTransactions'
 import { useToast } from '../hooks/useToast'
 import { useHoldings } from '../hooks/useHoldings'
 import TransactionList from '../components/transactions/TransactionList'
@@ -28,6 +28,7 @@ export default function HistoryPage() {
 
   const { showToast } = useToast()
   const deleteMut = useDeleteTransaction()
+  const updateMut = useUpdateTransaction()
   const { data: holdings } = useHoldings()
   const { data, isLoading } = useTransactions({
     holding_id: holdingId ? Number(holdingId) : undefined,
@@ -114,12 +115,21 @@ export default function HistoryPage() {
       ) : (
         <div className="space-y-3">
           <div className="rounded-2xl bg-bg-card border border-border-subtle overflow-hidden">
-            <TransactionList transactions={transactions} onDelete={(txId) => {
-              deleteMut.mutate(txId, {
-                onSuccess: () => showToast('删除成功'),
-                onError: () => showToast('删除失败', 'error'),
-              })
-            }} />
+            <TransactionList
+              transactions={transactions}
+              onDelete={(txId) => {
+                deleteMut.mutate(txId, {
+                  onSuccess: () => showToast('删除成功'),
+                  onError: () => showToast('删除失败', 'error'),
+                })
+              }}
+              onUpdate={(txId, data) => {
+                updateMut.mutate({ id: txId, data }, {
+                  onSuccess: () => showToast('修改成功'),
+                  onError: () => showToast('修改失败', 'error'),
+                })
+              }}
+            />
           </div>
 
           {/* Pagination */}

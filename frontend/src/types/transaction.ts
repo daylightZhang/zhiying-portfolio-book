@@ -20,3 +20,8 @@ export interface TransactionCreate {
   notes?: string
   transacted_at: string
 }
+
+export interface TransactionUpdate {
+  transacted_at?: string
+  notes?: string
+}
