@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Link, Unlink } from 'lucide-react'
 import { MARKETS, CN_FUTURES_PRODUCTS } from '../../utils/constants'
 import CustomSelect from '../common/CustomSelect'
+import BrokerPositionSelect from './BrokerPositionSelect'
 import { useBrokerPositions } from '../../hooks/useHoldings'
 import { useAccounts, useCurrentAccount } from '../../hooks/useAccount'
 import type { Holding, HoldingCreate, HoldingUpdate } from '../../types/holding'
@@ -43,13 +44,6 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
 
   const selectedMarket = MARKETS.find(m => m.value === market)
   const isFutures = market === 'CN_FUTURES'
-
-  // Group broker positions by account
-  const brokerGroups = brokerPositions?.reduce((acc, bp) => {
-    if (!acc[bp.account_name]) acc[bp.account_name] = []
-    acc[bp.account_name].push(bp)
-    return acc
-  }, {} as Record<string, typeof brokerPositions>) || {}
 
   const selectedBrokerPos = brokerPositions?.find(bp => bp.id === selectedBrokerId)
 
@@ -200,20 +194,11 @@ export default function HoldingForm({ open, onClose, onSubmitCreate, onSubmitUpd
               </label>
               {linkEnabled && (
                 <div className="space-y-2 rounded-lg border border-border-subtle bg-bg-hover p-3 animate-fadeIn">
-                  <select
-                    value={selectedBrokerId ?? ''}
-                    onChange={e => setSelectedBrokerId(e.target.value ? Number(e.target.value) : null)}
-                    className={inputClass}
-                  >
-                    <option value="">选择券商持仓</option>
-                    {Object.entries(brokerGroups).map(([acctName, positions]) => (
-                      <optgroup key={acctName} label={acctName}>
-                        {positions.map(bp => (
-                          <option key={bp.id} value={bp.id}>{bp.symbol} - {bp.name} ({bp.quantity}股)</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <BrokerPositionSelect
+                    positions={brokerPositions}
+                    value={selectedBrokerId}
+                    onChange={setSelectedBrokerId}
+                  />
                   <div>
                     <label className="block text-xs text-t-muted mb-1">占比 %</label>
                     <input
