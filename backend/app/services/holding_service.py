@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from app.utils.ticker import now_beijing
 from sqlalchemy.orm import Session
@@ -5,9 +6,25 @@ from sqlalchemy import select, update
 
 from app.models.holding import Holding
 from app.models.account import Account
+from app.models.market_quote import MarketQuote
 from app.models.transaction import Transaction
 from app.schemas.holding import HoldingCreate, HoldingUpdate
 from app.utils.ticker import MARKET_CURRENCY_MAP, Market, Currency
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_quote_for_new_symbol(db: Session, symbol: str, account_id: int) -> None:
+    """If there's no MarketQuote yet for this symbol, fetch one synchronously.
+    Failures are swallowed — the holding is already created and a periodic refresh will fill it in eventually."""
+    existing = db.get(MarketQuote, symbol)
+    if existing is not None:
+        return
+    try:
+        from app.services import market_data_service
+        market_data_service.refresh_single_price(db, symbol, account_id)
+    except Exception as e:
+        logger.warning("ensure_quote_for_new_symbol failed for %s: %s", symbol, e)
 
 
 def get_all_holdings(db: Session, market: str | None = None, account_id: int = 1) -> list[Holding]:
@@ -58,6 +75,7 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
         db.add(holding)
         db.commit()
         db.refresh(holding)
+        _ensure_quote_for_new_symbol(db, holding.symbol, account_id)
         return holding
 
     holding = Holding(
@@ -103,6 +121,7 @@ def create_holding(db: Session, data: HoldingCreate, account_id: int = 1) -> Hol
 
     db.commit()
     db.refresh(holding)
+    _ensure_quote_for_new_symbol(db, holding.symbol, account_id)
     return holding
 
 
